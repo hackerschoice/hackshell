@@ -1,0 +1,34 @@
+name: Auto Deploy to WWW
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - tools/hackshell.sh
+      # - tools/**
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Deploy to WWW
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Deploy whatserver & hackshell to WWW
+      env:
+        SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+      run: |
+        cp hackshell.sh /tmp
+        mkdir ~/.ssh
+        echo "$SSH_DEPLOY_KEY" >~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        cd /tmp/
+        git clone -b gh-pages --single-branch git@github.com:hackerschoice/hackerschoice.github.io.git
+        cd hackerschoice.github.io
+        cmp -s /tmp/hackshell.sh ws  || { cat /tmp/hackshell.sh >hs; is_updated=1; }
+
+        [ -n $is_updated ] && {
+          git config --local user.name "GitHub Action"
+          git config --local user.email "root@proton.thc.org"
+          git add ws hs && git commit -m "whatserver hackshell" && git push
+        }
