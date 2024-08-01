@@ -4,7 +4,8 @@ on:
     branches:
       - master
     paths:
-      - tools/hackshell.sh
+      - hackshell.sh
+      # - tools/hackshell.sh
       # - tools/**
   workflow_dispatch:
 
@@ -30,5 +31,5 @@ jobs:
         [ -n $is_updated ] && {
           git config --local user.name "GitHub Action"
           git config --local user.email "root@proton.thc.org"
-          git add ws hs && git commit -m "whatserver hackshell" && git push
+          git add ws hs && git commit -m "hackshell" && git push
         }
