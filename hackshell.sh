@@ -928,9 +928,10 @@ hs_init_alias() {
 }
 
 hs_init_shell() {
-    unset HISTFILE
+    unset HISTFILE LC_TERMINAL LC_TERMINAL_VERSION
     [ -n "$BASH" ] && export HISTFILE="/dev/null"
     export BASH_HISTORY="/dev/null"
+    history -c 2>/dev/null
     export LANG=en_US.UTF-8
     locale -a 2>/dev/null|grep -Fqim1 en_US.UTF || export LANG=en_US
     export LESSHISTFILE=-
