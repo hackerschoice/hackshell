@@ -16,7 +16,6 @@
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
 #
-# https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/blob/master/tools/hackshell.sh
 # 2024 by theM0ntarCann0n & skpr
 
 CY="\033[1;33m" # yellow
