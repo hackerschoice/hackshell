@@ -2,7 +2,7 @@ name: Auto Deploy to WWW
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - hackshell.sh
       # - tools/hackshell.sh
