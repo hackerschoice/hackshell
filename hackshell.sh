@@ -11,6 +11,7 @@
 #
 # Usage:
 #     source <(curl -SsfL https://thc.org/hs)
+#     source <(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 #
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
