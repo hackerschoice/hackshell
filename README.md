@@ -3,7 +3,11 @@ Make BASH stealthy and hacker friendly with lots of bash functions
 
 Usage:
 ```shell
-  source <(curl -SsfL https://thc.org/hs)
+ source <(curl -SsfL https://thc.org/hs)
+```
+
+```shell
+ source <(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 ```
 
 Some features:
