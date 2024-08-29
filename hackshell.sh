@@ -79,8 +79,11 @@ xsu() {
     [ "$UID" -ne 0 ] && { HS_ERR "Need root"; return; }
     u=$(id -u "${name:?}") || return
     g=$(id -g "${name:?}") || return
-    h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)" || return
+    h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)"
+    echo "HOME=${h:-/tmp}"
+    unset -n _HS_HOME_ORIG
     HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
+    export _HS_HOME_ORIG
 }
 
 xtmux() {
