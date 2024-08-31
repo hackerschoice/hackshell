@@ -763,9 +763,17 @@ lootlight() {
 
     unset str
     if command -v pgrep >/dev/null && pgrep --help 2>/dev/null | grep -qFm1 -- --list-full ; then
-        str="$(pgrep -x 'ssh' -a)"
+        if [[ "$UID" -eq 0 ]]; then
+            str="$(pgrep -x 'ssh' --list-full)"
+        else
+            str="$(pgrep -x 'ssh' --list-full --euid "$UID")"
+        fi
     elif command -v ps >/dev/null; then
-        str="$(ps alx | grep "ssh " | grep -v grep)"
+        if [[ "$UID" -eq 0 ]]; then
+            str="$(ps alx | grep "ssh " | grep -v grep)"
+        else
+            str="$(ps lx | grep "ssh " | grep -v grep)"
+        fi
     fi
     [ -n "$str" ] && {
         echo -e "${CB}SSH-Hijack (reptyr)${CDY}${CF}"
