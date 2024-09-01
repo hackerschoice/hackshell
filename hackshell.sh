@@ -379,9 +379,9 @@ hs_mkxhome() {
     [ -d "${XHOME}" ] && return 255
     mkdir -p "${XHOME:?}" 2>/dev/null || return
     echo -e ">>> Using ${CDY}XHOME=${XHOME}${CN}. ${CF}[will auto-destruct on exit]${CN}"
-    echo -e ">>> Type ${CDC}destruct${CN} to erase ${CDY}${XHOME}${CN}"
-    echo -e ">>> Type ${CDC}keep${CN} to disable auto-destruct on exit."
-    echo -e ">>> Type ${CDC}cdx${CN} to change to your hidden ${CDY}\"\${XHOME}\"${CN} directory"
+    echo -e ">>> Type ${CDC}xdestruct${CN} to erase ${CDY}${XHOME}${CN}"
+    echo -e ">>> Type ${CDC}xkeep${CN} to disable auto-destruct on exit."
+    echo -e ">>> Type ${CDC}xcd${CN} to change to your hidden ${CDY}\"\${XHOME}\"${CN} directory"
 }
 
 cdx() { cd "${XHOME}" || return; }
@@ -397,9 +397,10 @@ xhome() {
 
 home() {
     export HOME="${_HS_HOME_ORIG}"
+    echo -e "${CDM}HOME set to ${CDY}${HOME}${CN}"
 }
 
-keep() {
+xkeep() {
     touch "${XHOME}/.keep" 2>/dev/null
     HS_INFO "Wont delete ${CDY}${XHOME}${CDM} on exit"
 }
@@ -501,11 +502,11 @@ bin() {
         FORCE=1 # implied. Always download even if systemwide exists
         unset is_showhelp
     }
+
     a="${arch}"
     [ "$arch" == "x86_64" ] && arch_alt="amd64"
     [ "$arch" == "aarch64" ] && arch_alt="arm64"
     hs_mkxhome
-
     bin_dl() {
         local dst="${XHOME}/${1:?}"
         local str="${CDM}Downloading ${CDC}${1:?}${CDM}........................................"
@@ -944,7 +945,7 @@ _hs_destruct() {
     rm -rf "${XHOME:?}"
 }
 
-destruct() {
+xdestruct() {
     _hs_destruct
     export HOME="${_HS_HOME_ORIG}"
 }
@@ -1123,7 +1124,7 @@ scan() {
 }
 
 hs_init_alias_curl() {
-    command -v curl >/dev/null && curl --help curl | grep -iqm1 proto-default && alias curl="curl --proto-default https"
+    which curl >/dev/null && curl --help curl 2>/dev/null | grep -iqm1 proto-default && alias curl="curl --proto-default https"
 }
 
 hs_init_alias() {
