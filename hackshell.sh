@@ -107,6 +107,18 @@ xssh() {
     stty "${ttyp}"
 }
 
+purl() {
+    local opts="timeout=10"
+    local opts_init
+    local url="${1:?}"
+    { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
+    [ -n "$UNSAFE" ] && {
+        opts_init="import ssl;ctx = ssl.create_default_context();ctx.check_hostname = False;ctx.verify_mode = ssl.CERT_NONE;"
+        opts+=", context=ctx"
+    }
+    "$HS_PY" -c "import urllib.request;import sys;${opts_init}sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
+}
+
 surl() {
     local r="${1#*://}"
     local opts=("-quiet" "-ign_eof")
@@ -116,6 +128,14 @@ surl() {
     echo -en "GET /${query} HTTP/1.0\r\nHost: ${host%%:*}\r\n\r\n" \
 	| openssl s_client "${opts[@]}" -connect "${host%%:*}:443" \
 	| sed '1,/^\r\{0,1\}$/d'
+}
+
+lurl() {
+    local url="${1:?}"
+    { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
+    perl -e 'use LWP::Simple qw(get);
+my $url = '"'${1:?}'"';
+print(get $url);'
 }
 
 burl() {
@@ -1013,17 +1033,7 @@ hs_init_dl() {
             wget -O- "${opts[@]}" --connect-timeout=7 --dns-timeout=7 "${1:?}"
         }
     elif [ -n "$HS_PY" ]; then
-        dl() {
-            local opts="timeout=10"
-            local opts_init
-            local url="${1:?}"
-            { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
-            [ -n "$UNSAFE" ] && {
-                opts_init="import ssl;ctx = ssl.create_default_context();ctx.check_hostname = False;ctx.verify_mode = ssl.CERT_NONE;"
-                opts+=", context=ctx"
-            }
-            "$HS_PY" -c "import urllib.request;import sys;${opts_init}sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
-        }
+        dl() { purl "$@"; }
     elif which openssl >/dev/null; then
         dl() { surl "$@"; }
     else
