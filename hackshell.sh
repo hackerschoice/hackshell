@@ -517,7 +517,7 @@ bin() {
         }
         echo -en "${str:0:64}"
         [ -s "${dst}" ] || rm -f "${dst:?}" 2>/dev/null
-        [ -z "$FORCE" ] && command -v "${1}" >/dev/null && is_skip=1
+        [ -z "$FORCE" ] && which "${1}" >/dev/null && is_skip=1
         [ -n "$FORCE" ] && [ -s "$dst" ] && is_skip=1
         [ -n "$is_skip" ] && { echo -e "[${CDY}SKIPPED${CDM}]${CN}"; return 0; }
         { err=$(dl "${2:?}"  2>&1 >&3 3>&-); } >"${dst}" 3>&1 || {
@@ -993,14 +993,14 @@ hs_exit() {
 ### Functions (temporary)
 hs_init_dl() {
     # Ignore TLS certificate. This is DANGEROUS but many hosts have missing ca-bundles or TLS-Proxies.
-    if command -v curl >/dev/null; then
+    if which curl >/dev/null; then
         _HS_SSL_ERR="certificate "
         dl() { 
             local opts=()
             [ -n "$UNSAFE" ] && opts=("-k")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 3 "${1:?}"
         }
-    elif command -v wget >/dev/null; then
+    elif which wget >/dev/null; then
         _HS_SSL_ERR="is not trusted"
         dl() {
             local opts=()
@@ -1018,12 +1018,12 @@ hs_init_dl() {
                 opts_init="import ssl;ctx = ssl.create_default_context();ctx.check_hostname = False;ctx.verify_mode = ssl.CERT_NONE;"
                 opts+=", context=ctx"
             }
-            "$HS_PY" -c "import urllib.request;import sys;${opts_init}sys.stdout.buffer.write(urllib.request.urlopen($url, $opts).read())"
+            "$HS_PY" -c "import urllib.request;import sys;${opts_init}sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
         }
-    elif command openssl >/dev/null; then
+    elif which openssl >/dev/null; then
         dl() { surl "$@"; }
     else
-        dl() { HS_ERR "Not found: curl, wget, python"; }
+        dl() { HS_ERR "Not found: curl, wget, python or openssl"; }
     fi
 }
 
