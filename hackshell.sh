@@ -109,9 +109,12 @@ xssh() {
 
 surl() {
     local r="${1#*://}"
+    local opts=("-quiet" "-ign_eof")
     IFS=/ read -r host query <<<"${r}"
+    openssl s_client --help 2>&1| grep -qFm1 -- -ignore_unexpected_eof && opts+=("-ignore_unexpected_eof")
+    openssl s_client --help 2>&1| grep -qFm1 -- -verify_quiet && opts+=("-verify_quiet")
     echo -en "GET /${query} HTTP/1.0\r\nHost: ${host%%:*}\r\n\r\n" \
-	| openssl s_client -ignore_unexpected_eof -verify_quiet -quiet -ign_eof -connect "${host%%:*}:443" \
+	| openssl s_client "${opts[@]}" -connect "${host%%:*}:443" \
 	| sed '1,/^\r\{0,1\}$/d'
 }
 
