@@ -94,16 +94,15 @@ xtmux() {
 }
 
 xssh() {
-    local ttyp
+    local ttyp="$(stty -g)"
     echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL https://thc.org/hs)${CN}"
 #reset -I
 #PS1='"'\[\\033[36m\]\\u\[\\033[m\]@\[\\033[32m\]\\h:\[\\033[33;1m\]\\w\[\\033[m\]\\$ '"'
 #"'stty -echo;printf "\\e[18t";read -t5 -rdt R;stty sane $(echo "$R"|awk -F";" '"'"'{ printf "rows "$3" cols "$2; }'"'"')'"${CN}"
-    ttyp=$(stty --save)
     stty raw -echo icrnl opost
     ssh "${HS_SSH_OPT[@]}" -T \
         "$@" \
-        "unset SSH_CLIENT SSH_CONNECTION; TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'exec -a [uid] bash -i' /dev/null"
+        "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize); exec -a [uid] bash -i' /dev/null"
     stty "${ttyp}"
 }
 
