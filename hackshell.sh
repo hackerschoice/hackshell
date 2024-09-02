@@ -95,15 +95,26 @@ xtmux() {
 
 xssh() {
     local ttyp="$(stty -g)"
+    local opts=()
     echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL https://thc.org/hs)${CN}"
-#reset -I
-#PS1='"'\[\\033[36m\]\\u\[\\033[m\]@\[\\033[32m\]\\h:\[\\033[33;1m\]\\w\[\\033[m\]\\$ '"'
-#"'stty -echo;printf "\\e[18t";read -t5 -rdt R;stty sane $(echo "$R"|awk -F";" '"'"'{ printf "rows "$3" cols "$2; }'"'"')'"${CN}"
+    [ -z "$NOMX" ] && {
+        [ ! -d "$XHOME" ] && hs_mkxhome
+        [ -d "$XHOME" ] && {
+            HS_INFO "Multiplexing all SSH connections over a single TCP. ${CF}[set NOMX=1 to disable]"
+            opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
+        }
+    }
     stty raw -echo icrnl opost
-    ssh "${HS_SSH_OPT[@]}" -T \
+    ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
         "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize); exec -a [uid] bash -i' /dev/null"
     stty "${ttyp}"
+}
+
+xscp() {
+    local opts=()
+    [ -z "$NOMX" ] && [ -d "$XHOME" ] && opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"")
+    scp "${HS_SSH_OPT[@]}" "${opts[@]}" "$@"
 }
 
 purl() {
@@ -187,8 +198,6 @@ notime_cp() {
     local olddir_date
     local dir
 
-    [ -z "$UID" ] && UID="$(id -u 2>/dev/null)"
-    [ -z "$USER" ] && USER="$(id -un 2>/dev/null)"
     [[ ! -f "$src" ]] && { echo >&2 "Not found: $src"; return 255; }
     if [[ -d "$dst" ]]; then
         dir="$dst"
@@ -1054,6 +1063,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         [ -n "$str" ] && SHELL="${str}"
     }
     [ -z "$UID" ] && UID="$(id -u 2>/dev/null)"
+    [ -z "$USER" ] && USER="$(id -un 2>/dev/null)"
     [ -n "$_HS_HOME_ORIG" ] && export HOME="$_HS_HOME_ORIG"
     export _HS_HOME_ORIG="$HOME"
 
@@ -1090,6 +1100,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
         HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
         HS_SSH_OPT+=("-oConnectTimeout=5")
+        HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
     hs_init_dl
 }
@@ -1168,7 +1179,7 @@ hs_init_shell() {
     export LESSHISTFILE=-
     export REDISCLI_HISTFILE=/dev/null
     export MYSQL_HISTFILE=/dev/null
-    export T=.$'\t''~?$?'
+    export T=.$'\t''~?$?'".${UID}"
     TMPDIR="/tmp"
     [ -d "/var/tmp" ] && TMPDIR="/var/tmp"
     [ -d "/dev/shm" ] && TMPDIR="/dev/shm"
@@ -1204,7 +1215,7 @@ xhelp() {
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
 ${CDC} xsu username                          ${CDM}Switch user
 ${CDC} xtmux                                 ${CDM}'hidden' tmux ${CN}${CF}[e.g. empty tmux list-s]
-${CDC} xssh                                  ${CDM}Silently log in to remote host
+${CDC} xssh & xscp                           ${CDM}Silently log in to remote host
 ${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destination
 ${CDC} ghostip                               ${CDM}Originate from a non-existing IP
 ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no https support]
