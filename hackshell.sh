@@ -119,7 +119,7 @@ xssh() {
         }
     }
     stty raw -echo icrnl opost
-    ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
+    \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
         "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize); exec -a [uid] bash -i' /dev/null"
     stty "${ttyp}"
@@ -128,7 +128,7 @@ xssh() {
 xscp() {
     local opts=()
     [ -z "$NOMX" ] && [ -d "$XHOME" ] && opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"")
-    scp "${HS_SSH_OPT[@]}" "${opts[@]}" "$@"
+    \scp "${HS_SSH_OPT[@]}" "${opts[@]}" "$@"
 }
 
 purl() {
@@ -416,7 +416,7 @@ hide() {
 
 _hs_xhome_init() {
     [[ "$PATH" != *"$XHOME"* ]] && export PATH="${XHOME}:$PATH"
-    hs_init_alias_curl
+    hs_init_alias_reinit
 }
 
 hs_mkxhome() {
@@ -563,7 +563,7 @@ bin() {
         }
         echo -en "${str:0:64}"
         [ -s "${dst}" ] || rm -f "${dst:?}" 2>/dev/null
-        [ -z "$FORCE" ] && which "${1}" >/dev/null && is_skip=1
+        [ -z "$FORCE" ] && which "${1}" &>/dev/null && is_skip=1
         [ -n "$FORCE" ] && [ -s "$dst" ] && is_skip=1
         [ -n "$is_skip" ] && { echo -e "[${CDY}SKIPPED${CDM}]${CN}"; return 0; }
         { err=$(dl "${2:?}"  2>&1 >&3 3>&-); } >"${dst}" 3>&1 || {
@@ -1058,14 +1058,14 @@ hs_exit() {
 ### Functions (temporary)
 hs_init_dl() {
     # Ignore TLS certificate. This is DANGEROUS but many hosts have missing ca-bundles or TLS-Proxies.
-    if which curl >/dev/null; then
+    if which curl &>/dev/null; then
         _HS_SSL_ERR="certificate "
         dl() { 
             local opts=()
             [ -n "$UNSAFE" ] && opts=("-k")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 3 "${1:?}"
         }
-    elif which wget >/dev/null; then
+    elif which wget &>/dev/null; then
         _HS_SSL_ERR="is not trusted"
         dl() {
             local opts=()
@@ -1075,7 +1075,7 @@ hs_init_dl() {
         }
     elif [ -n "$HS_PY" ]; then
         dl() { purl "$@"; }
-    elif which openssl >/dev/null; then
+    elif which openssl &>/dev/null; then
         dl() { surl "$@"; }
     else
         dl() { HS_ERR "Not found: curl, wget, python or openssl"; }
@@ -1179,14 +1179,16 @@ scan() {
     done
 }
 
-hs_init_alias_curl() {
-    which curl >/dev/null && curl --help curl 2>/dev/null | grep -iqm1 proto-default && alias curl="curl --proto-default https"
+hs_init_alias_reinit() {
+    # stop curl from creating ~/.pkt/nssdb
+    which curl &>/dev/null && curl --help 2>/dev/null | grep -iqm1 proto-default && alias curl="HOME=/dev/null curl --proto-default https"
+    alias curl &>/dev/null || alias curl='HOME=/dev/null curl'
+    which wget &>/dev/null && wget --help 2>/dev/null | grep -Fqm1 -- --no-hsts && alias wget="wget --no-hsts"
 }
 
 hs_init_alias() {
     alias ssh="ssh ${HS_SSH_OPT[*]}"
     alias scp="scp ${HS_SSH_OPT[*]}"
-    alias wget='wget --no-hsts'
     alias vi="vi -i NONE"
     alias vim="vim -i NONE"
     alias screen="screen -ln"
@@ -1199,7 +1201,7 @@ hs_init_alias() {
     alias cd..='cd ..'
     alias ..='cd ..'
 
-    hs_init_alias_curl
+    hs_init_alias_reinit
 }
 
 hs_init_shell() {
