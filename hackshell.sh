@@ -307,7 +307,7 @@ find_subdomains() {
 	local d="${1//./\\.}"
 	local rexf='[0-9a-zA-Z_.-]{0,64}'"${d}"
 	local rex="$rexf"'([^0-9a-zA-Z_]{1}|$)'
-	[ $# -le 0 ] && { echo -en >&2 "Extract sub-domains from all files (or stdin)\nUsage  : find_subdomains <apex-domain> <file>\nExample: find_subdomain .com | anew"; return; }
+	[ $# -le 0 ] && { echo -en >&2 "Extract sub-domains from all files (or stdin)\nUsage  : find_subdomains <apex-domain> <file>\nExample: find_subdomains .com | anew"; return; }
 	shift 1
 	[ $# -le 0 ] && [ -t 0 ] && set -- .
 	command -v rg >/dev/null && { rg -oaIN --no-heading "$rex" "$@" | grep -Eao "$rexf"; return; }
@@ -993,12 +993,18 @@ ws() {
     dl 'https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/whatserver.sh' | bash
 }
 
-_hs_resize() {
+_hs_try_resize() {
+    local str
     local R
     command -v reset >/dev/null && TERM=xterm reset -I
-    # NOTE: On localhost, this wont always work because xterm responds to fast and
-    # before 'read' gets executed.
-    stty -echo;printf "\e[18t"; read -t5 -rdt R;stty sane $(echo "${R:-8;80;25}"|awk -F";" '{printf "rows "$3" cols "$2;}')
+
+    command -v stty >/dev/null || return
+    str="$(stty size)"
+    if [[ "$str" == "25 80" ]] || [[ "$str" == "0 0" ]]; then
+        # NOTE: On localhost, this wont always work because xterm responds to fast and
+        # before 'read' gets executed.
+        stty -echo;printf "\e[18t"; read -t5 -rdt R;stty sane $(echo "${R:-8;80;25}"|awk -F";" '{printf "rows "$3" cols "$2;}')
+    fi
 }
 
 _hs_mk_pty() {
@@ -1151,7 +1157,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         [ ! -t 0 ] && _hs_mk_pty
 
         # Set cols/rows if not set (==0)
-        [ -t 0 ] && command -v stty >/dev/null && stty -a |grep -qFm1 -- "rows 0" && _hs_resize
+        [ -t 0 ] && _hs_try_resize
     }
 
     if [ -n "$BASH" ]; then
@@ -1169,8 +1175,10 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         HS_SSH_OPT+=("-oStrictHostKeyChecking=${a:-accept-new}")
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
-        [[ "$(\ssh -Q kex)" == *"diffie-hellman-group1-sha1"* ]] && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
-        [[ "$(\ssh -Q key)" == *"ssh-dss"* ]] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
+        # Even if 'ssh -Q' shows the key it sometimes complains that it cant use them.
+        # User can set SSH_NO_OLD before hs to disable old ciphers.
+        [ -z "$SSH_NO_OLD" ] && [[ "$(\ssh -Q kex)" == *"diffie-hellman-group1-sha1"* ]] && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
+        [ -z "$SSH_NO_OLD" ] && [[ "$(\ssh -Q key)" == *"ssh-dss"* ]] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
@@ -1304,7 +1312,7 @@ ${CDC} ctime <file>                          ${CDM}Set ctime to file's mtime ${C
 ${CDC} ttyinject                             ${CDM}Become root when root switches to ${USER:-this user}
 ${CDC} wfind <dir> [<dir> ...]               ${CDM}Find writeable directories
 ${CDC} hgrep <string>                        ${CDM}Grep for pattern, output for humans ${CN}${CF}[hgrep password]
-${CDC} find_subdomain .foobar.com            ${CDM}Search files for sub-domain
+${CDC} find_subdomains .foobar.com            ${CDM}Search files for sub-domain
 ${CDC} crt foobar.com                        ${CDM}Query crt.sh for all sub-domains
 ${CDC} dns foobar.com                        ${CDM}Resolv domain name to IPv4
 ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple public databases
