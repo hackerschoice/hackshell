@@ -344,7 +344,8 @@ bounceinit() {
     }
     while [ $# -gt 0 ]; do
         _hs_bounce_src+=("${1}")
-        iptables -t mangle -I PREROUTING -s "${1}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188 
+        iptables -t mangle -I PREROUTING -s "${1}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
+        iptables -t mangle -I PREROUTING -s "${1}" -p udp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
         shift 1
     done
     iptables -t mangle -D PREROUTING -j CONNMARK --restore-mark >/dev/null 2>/dev/null
@@ -360,12 +361,14 @@ unbounce() {
     local str
 
     for x in "${_hs_bounce_dst[@]}"; do
-        iptables -t nat -D PREROUTING -p tcp --dport "${x%%-*}" -m mark --mark 1188 -j DNAT --to "${x##*-}"
+        iptables -t nat -D PREROUTING -p tcp --dport "${x%%-*}" -m mark --mark 1188 -j DNAT --to "${x##*-}" 2>/dev/null
+        iptables -t nat -D PREROUTING -p udp --dport "${x%%-*}" -m mark --mark 1188 -j DNAT --to "${x##*-}" 2>/dev/null
     done
     unset _hs_bounce_dst
 
     for x in "${_hs_bounce_src[@]}"; do
-        iptables -t mangle -D PREROUTING -s "${x}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188 
+        iptables -t mangle -D PREROUTING -s "${x}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
+        iptables -t mangle -D PREROUTING -s "${x}" -p udp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
     done
     unset _hs_bounce_src
     iptables -t mangle -D PREROUTING -j CONNMARK --restore-mark >/dev/null 2>/dev/null
@@ -379,15 +382,16 @@ bounce() {
     local fport="$1"
     local dstip="$2"
     local dstport="$3"
+    local proto="${4:-tcp}"
     [[ $# -lt 3 ]] && {
         xhelp_bounce
         return 255
     }
     bounceinit
 
-    iptables -t nat -A PREROUTING -p tcp --dport "${fport:?}" -m mark --mark 1188 -j DNAT --to "${dstip:?}:${dstport:?}" || return
+    iptables -t nat -A PREROUTING -p "${proto}" --dport "${fport:?}" -m mark --mark 1188 -j DNAT --to "${dstip:?}:${dstport:?}" || return
     _hs_bounce_dst+=("${fport}-${dstip}:${dstport}")
-    HS_INFO "Traffic to _this_ host's ${CDY}${fport}${CDM} is now forwarded to ${CDY}${dstip}:${dstport}"
+    HS_INFO "Traffic to _this_ host's ${CDY}${proto}:${fport}${CDM} is now forwarded to ${CDY}${dstip}:${dstport}"
 }
 
 crt() {
@@ -997,14 +1001,20 @@ ws() {
 _hs_try_resize() {
     local str
     local R
+    local a
+    local IFS
     command -v reset >/dev/null && TERM=xterm reset -I
 
     command -v stty >/dev/null || return
     str="$(stty size)"
-    if [[ "$str" == "25 80" ]] || [[ "$str" == "0 0" ]]; then
+    if [[ "$str" == "24 80" ]] || [[ "$str" == "25 80" ]] || [[ "$str" == "0 0" ]]; then
         # NOTE: On localhost, this wont always work because xterm responds to fast and
         # before 'read' gets executed.
-        stty -echo;printf "\e[18t"; read -t5 -rdt R;stty sane $(echo "${R:-8;80;25}"|awk -F";" '{printf "rows "$3" cols "$2;}')
+        stty -echo;printf "\e[18t"; read -t5 -rdt R;
+        IFS=';' read -r -a a <<< "${R:-8;25;80}"
+        # Normally it returns ROWS/25:COLS/80 but some systems return it reverse
+        [ "${a[1]}" -ge "${a[2]}" ] && { R="${a[1]}"; a[1]="${a[2]}"; a[2]="${R}"; }
+        stty sane rows "${a[1]}" cols "${a[2]}"
     fi
 }
 
