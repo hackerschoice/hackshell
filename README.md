@@ -10,7 +10,7 @@ Usage:
  source <(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 ```
 
-No SSL/TLS alternatives:
+Ignore SSL / Certificate warnings:
 ```shell
  source <(wget --no-check-certificate -q -O- https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 ```
