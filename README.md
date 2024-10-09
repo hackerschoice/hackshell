@@ -22,5 +22,5 @@ Some features:
 
 It works best with bash. Download BASH if there is no bash on your target:
 ```shell
-curl -obash -SsfL 'https://bin.ajam.dev/$(uname -m)/bash' && chmod 700 bash && ./bash --version && exec ./bash -il
+curl -obash -SsfL "https://bin.ajam.dev/$(uname -m)/bash" && chmod 700 bash && ./bash --version && exec ./bash -il
 ```
