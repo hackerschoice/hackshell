@@ -22,5 +22,7 @@ Some features:
 
 It works best with bash. Download BASH if there is no bash on your target:
 ```shell
-curl -obash -SsfL "https://bin.ajam.dev/$(uname -m)/bash" && chmod 700 bash && ./bash --version && exec ./bash -il
+URL="https://bin.ajam.dev/$(uname -m)/bash"
+[ "$(uname -m)" == i686 ] && URL='https://github.com/polaco1782/linux-static-binaries/raw/refs/heads/master/x86-i686/bash'
+curl -obash -SsfL "${URL}" && chmod 700 bash && ./bash --version && exec ./bash -il
 ```
