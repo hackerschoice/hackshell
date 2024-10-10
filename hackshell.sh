@@ -1182,9 +1182,13 @@ hs_init() {
     local a
     local prg="$1"
     local str
-
-    [ -z "$BASH" ] && { HS_WARN "Shell is not BASH. Try:
-${CY}>>>>> ${CDC}curl -obash -SsfL \"https://bin.ajam.dev/$(uname -m)/bash\" && chmod 700 bash && exec ./bash -il"; sleep 2; }
+    [ -z "$BASH" ] && {
+        str="https://bin.ajam.dev/$(uname -m)/bash"
+        [[ "$(uname -m)" == i686 ]] && str='https://github.com/polaco1782/linux-static-binaries/raw/refs/heads/master/x86-i686/bash'
+        HS_WARN "Shell is not BASH. Try:
+${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
+        sleep 2
+    }
     [ -n "$BASH" ] && [ "${prg##*\.}" = "sh" ] && { HS_ERR "Use ${CDC}source $prg${CDR} instead"; sleep 2; exit 255; }
     [ -n "$BASH" ] && {
         str="$(command -v bash)"
