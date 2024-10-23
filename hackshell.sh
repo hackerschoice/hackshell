@@ -331,8 +331,8 @@ transfer() {
     [[ $# -eq 0 ]] && { echo -e >&2 "Usage:\n    transfer [file/directory]\n    transfer [name] <FILENAME"; return 255; }
     [[ ! -t 0 ]] && { curl -SsfL --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
     [[ ! -e "$1" ]] && { echo -e >&2 "Not found: $1"; return 255; }
-    [[ -d "$1" ]] && { (cd "${1}/.."; tar cfz - "${1##*/}")|curl -SsfL --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1##*/}.tar.gz"; return; }
-    curl -SsfL --progress-bar -T "$1" "https://${HS_TRANSFER_PROVIDER}/${1##*/}"
+    [[ -d "$1" ]] && { (cd "${1}/.."; tar cfz - "${1##*/}")|curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1##*/}.tar.gz"; return; }
+    curl -SsfL --connect-timeout 7 --progress-bar -T "$1" "https://${HS_TRANSFER_PROVIDER}/${1##*/}"
 }
 
 # SHRED without shred command
@@ -1153,6 +1153,7 @@ hs_exit() {
 
 ### Functions (temporary)
 hs_init_dl() {
+    local str
     # Ignore TLS certificate. This is DANGEROUS but many hosts have missing ca-bundles or TLS-Proxies.
     if which curl &>/dev/null; then
         _HS_SSL_ERR="certificate "
@@ -1163,11 +1164,17 @@ hs_init_dl() {
         }
     elif which wget &>/dev/null; then
         _HS_SSL_ERR="is not trusted"
+        str="$(wget --help 2>&1)"
+        if [[ "$str" == *"connect-timeout"* ]]; then
+            _HS_WGET_OPTS=("--connect-timeout=7" "--dns-timeout=7")
+        elif [[ "$str" == *"-T SEC" ]]; then
+            _HS_WGET_OPTS=("-T" "7")
+        fi
         dl() {
             local opts=()
             [ -n "$UNSAFE" ] && opts=("--no-check-certificate")
             # Can not use '-q' here because that also silences SSL/Cert errors
-            wget -O- "${opts[@]}" --connect-timeout=7 --dns-timeout=7 "${1:?}"
+            wget -O- "${opts[@]}" "${_HS_WGET_OPTS[@]}" "${1:?}"
         }
     elif [ -n "$HS_PY" ]; then
         dl() { purl "$@"; }
