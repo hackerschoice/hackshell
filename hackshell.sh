@@ -946,6 +946,8 @@ lootlight() {
         echo "${str}"
         echo -e "${CN}"
     }
+
+    _warn_edr
 }
 
 # Someone shall implement a sub-set from TeamTNT's tricks (use
