@@ -868,6 +868,31 @@ gsnc() {
 }
 command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 
+_warn_edr() {
+    local fns
+    local s
+    local out
+
+    s="$(command -v rkhunter)" && fns+=("${s}")
+    [ -e /etc/rkhunter.conf ] && fns+=("/etc/rkhunter.conf")
+    s="$(command -v clamscan)" && fns+=("${s}")
+    [ -e /etc/clamd.d/scan.conf ] && fns+=("/etc/clamd.d/scan.conf")
+    [ -e /etc/freshclam.conf ] && fns+=("/etc/freshclam.conf")
+
+    [ -n "$fns" ] && {
+        echo -e "${CR}AV/EDR found${CF}"
+        \ls -alrt "${fns[@]}"
+        echo -en "${CN}"
+    }
+
+    s="$(grep -v '^#' rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null | grep -F ' @@')" && out+="$s"$'\n'
+    [ -n "$out" ] && {
+        echo -e "${CR}Remote Logging detected${CF}"
+        echo "$out"
+        echo -en "${CN}"
+    }
+}
+
 lootlight() {
     local str
     ls -al /tmp/ssh-* &>/dev/null && {
