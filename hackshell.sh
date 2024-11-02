@@ -17,7 +17,7 @@
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
 #    HOMEDIR=       Loot location of /home [default: /home]
 #
-# 2024 by theM0ntarCann0n & skpr
+# 2024 by theM0ntarCann0n & Messede & skpr
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
 
@@ -37,7 +37,7 @@ _hs_init_color() {
     CDC="\033[0;36m" # cyan
     CF="\033[2m"    # faint
     CN="\033[0m"    # none
-    CW="\033[1;37m"
+    CW="\033[1;37m" # white
     CUL="\e[4m"
 }
 
@@ -875,24 +875,43 @@ _warn_edr() {
     local s
     local out
 
+    _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
+
     s="$(command -v rkhunter)" && fns+=("${s}")
     [ -e /etc/rkhunter.conf ] && fns+=("/etc/rkhunter.conf")
     s="$(command -v clamscan)" && fns+=("${s}")
     [ -e /etc/clamd.d/scan.conf ] && fns+=("/etc/clamd.d/scan.conf")
     [ -e /etc/freshclam.conf ] && fns+=("/etc/freshclam.conf")
+    [ -e /opt/CrowdStrike/falconctl ] && fns+=("/opt/CrowdStrike/falconctl")
 
     [ "${#fns[@]}" -ne 0 ] && {
-        echo -e "${CR}AV/EDR found${CF}"
-        \ls -alrt "${fns[@]}"
+        out="$(\ls -alrt "${fns[@]}")"$'\n'
+    }
+
+    _hs_chk_systemd "wazuh-agent"     "Wazuh"
+    _hs_chk_systemd "osqueryd"        "OSQuery"
+    _hs_chk_systemd "falcon-sensor"   "CrowdStrike"
+    _hs_chk_systemd "cbsensor"        "CarbonBlack"
+    _hs_chk_systemd "MFEcma"          "McAfee"
+    _hs_chk_systemd "ds_agent"        "Trend Micro"
+    _hs_chk_systemd "cylancesvc"      "Blackberry cyPROTECT"
+    _hs_chk_systemd "cyoptics"        "Blackberry cyOPTICS"
+
+    [ -n "$out" ] && {
+        echo -e "${CR}AV/EDR found ${CF}"
+        echo -n "$out"
         echo -en "${CN}"
     }
 
-    s="$(grep -v '^#' rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null | grep -F ' @@')" && out+="$s"$'\n'
+    unset out
+    s="$(grep -v '^#' rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null | grep -F ' @@')" && out="$s"$'\n'
     [ -n "$out" ] && {
         echo -e "${CR}Remote Logging detected${CF}"
-        echo "$out"
+        echo -n "$out"
         echo -en "${CN}"
     }
+
+    unset -f _hs_chk_systemd
 }
 
 _hs_gen_home() {
