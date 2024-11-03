@@ -113,7 +113,8 @@ source IPs use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM}"
 noansi() { sed -e 's/\x1b\[[0-9;]*m//g'; }
 alias nocol=noansi
 
-xlog() { local a=$(sed "/${1:?}/d" <"${2:?}") && echo "$a" >"${2:?}"; }
+xlog() { local a="$(sed "/${1:?}/d" <"${2:?}")" && echo "$a" >"${2:?}"; }
+
 xsu() {
     local name="${1:?}"
     local u g h
@@ -123,12 +124,13 @@ xsu() {
     u=$(id -u "${name:?}") || return
     g=$(id -g "${name:?}") || return
     h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)"
-    echo "HOME=${h:-/tmp}"
+    # echo "HOME=${h:-/tmp}"
     # Not all systems support unset -n
     # unset -n _HS_HOME_ORIG
+    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL ${_HSURL})${CN}"
     bak="$_HS_HOME_ORIG"
     unset _HS_HOME_ORIG
-    HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
+    LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
     export _HS_HOME_ORIG="$bak"
 }
 
