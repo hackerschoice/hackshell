@@ -332,7 +332,7 @@ find_subdomains() {
 # echo -n "XOREncodeThisSecret" | xor 0xfa
 xor() {
     _hs_dep perl
-    perl -e 'while($_ = getc()){ print $_^chr('"${1:-0xfa}"'); }'
+    perl -e 'while(<>){foreach $c (split //){print $c^chr('"${1:-0xfa}"');}}'
 }
 
 # HS_TRANSFER_PROVIDER="transfer.sh"
