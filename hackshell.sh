@@ -20,7 +20,7 @@
 # 2024 by theM0ntarCann0n & Messede & skpr
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
-_HSURLORIGN=
+_HSURLORIGIN=
 
 _hs_init_color() {
     [ -n "$CY" ] && return

@@ -19,7 +19,7 @@ jobs:
       env:
         SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
       run: |
-        cp hackshell.sh /tmp
+        cat hackshell.sh| sed 's|^_HSURLORIGIN=$|_HSURLORIGIN="https://thc.org/hs"|1' >/tmp/hackshell.sh
         mkdir ~/.ssh
         echo "$SSH_DEPLOY_KEY" >~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
