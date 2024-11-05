@@ -874,12 +874,10 @@ gsnc() {
 command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 
 _warn_edr() {
-    local fns
-    local s
-    local out
+    local fns s out
 
     _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
-    _hs_chk_fn() { [ ! -f "${1:?}" ] && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
+    _hs_chk_fn() { { [ -z "${1}" ] || [ ! -f "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
     _hs_chk_fn "/etc/clamd.d/scan.conf"            "ClamAV"
     _hs_chk_fn "$(command -v clamscan)"            "ClamAV"
