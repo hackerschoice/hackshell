@@ -329,6 +329,12 @@ find_subdomains() {
 	grep -Eaohr "$rex" "$@" | grep -Eo "$rexf"
 }
 
+# echo -n "XOREncodeThisSecret" | xor 0xfa
+xor() {
+    _hs_dep perl
+    perl -e 'while($_ = getc()){ print $_^chr('"${1:-0xfa}"'); }'
+}
+
 # HS_TRANSFER_PROVIDER="transfer.sh"
 HS_TRANSFER_PROVIDER="oshi.at"
 
