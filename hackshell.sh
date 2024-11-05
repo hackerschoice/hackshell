@@ -1576,7 +1576,7 @@ hs_init_shell
 xhelp
 
 ### Finishing
-[ -n "$HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}source <(curl -SsfL ${_HSURL})${CDM}'${CN}"
+[ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}source <(curl -SsfL ${_HSURL})${CDM}'${CN}"
 echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
 echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
 echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
@@ -1587,4 +1587,4 @@ lootlight
 
 # unset all functions that are no longer needed.
 unset -f hs_init hs_init_alias hs_init_dl hs_init_shell
-unset SSH_CONNECTION SSH_CLIENT
+unset SSH_CONNECTION SSH_CLIENT _HSURLORIGIN
