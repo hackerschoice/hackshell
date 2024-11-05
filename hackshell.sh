@@ -20,6 +20,7 @@
 # 2024 by theM0ntarCann0n & Messede & skpr
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
+_HSURLORIGN=
 
 _hs_init_color() {
     [ -n "$CY" ] && return
@@ -127,7 +128,7 @@ xsu() {
     # echo "HOME=${h:-/tmp}"
     # Not all systems support unset -n
     # unset -n _HS_HOME_ORIG
-    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL ${_HSURL})${CN}"
+    echo -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
     bak="$_HS_HOME_ORIG"
     unset _HS_HOME_ORIG
     LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
@@ -151,7 +152,7 @@ xssh() {
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
     }
-    echo -e "May need to cut & paste:  ${CDC}source <(curl -SsfL ${_HSURL})${CN}"
+    echo -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
@@ -878,26 +879,40 @@ _warn_edr() {
     local out
 
     _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
+    _hs_chk_fn() { [ ! -f "${1:?}" ] && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
-    s="$(command -v rkhunter)" && fns+=("${s}")
-    [ -e /etc/rkhunter.conf ] && fns+=("/etc/rkhunter.conf")
-    s="$(command -v clamscan)" && fns+=("${s}")
-    [ -e /etc/clamd.d/scan.conf ] && fns+=("/etc/clamd.d/scan.conf")
-    [ -e /etc/freshclam.conf ] && fns+=("/etc/freshclam.conf")
-    [ -e /opt/CrowdStrike/falconctl ] && fns+=("/opt/CrowdStrike/falconctl")
+    _hs_chk_fn "/etc/clamd.d/scan.conf"            "ClamAV"
+    _hs_chk_fn "$(command -v clamscan)"            "ClamAV"
+    _hs_chk_fn "/opt/CrowdStrike/falconctl"        "CrowdShite"
+    _hs_chk_fn "/etc/freshclam.conf"               "ClamAV"          
+    _hs_chk_fn "/etc/rkhunter.conf"                "RootKit Hunter"
+    _hs_chk_fn "$(command -v rkhunter)"            "RootKit Hunter"
 
-    [ "${#fns[@]}" -ne 0 ] && {
-        out="$(\ls -alrt "${fns[@]}")"$'\n'
-    }
+    [ "${#fns[@]}" -ne 0 ] && out="$(\ls -alrt "${fns[@]}")"$'\n'
 
-    _hs_chk_systemd "wazuh-agent"     "Wazuh"
-    _hs_chk_systemd "osqueryd"        "OSQuery"
-    _hs_chk_systemd "falcon-sensor"   "CrowdStrike"
-    _hs_chk_systemd "cbsensor"        "CarbonBlack"
-    _hs_chk_systemd "MFEcma"          "McAfee"
-    _hs_chk_systemd "ds_agent"        "Trend Micro"
-    _hs_chk_systemd "cylancesvc"      "Blackberry cyPROTECT"
-    _hs_chk_systemd "cyoptics"        "Blackberry cyOPTICS"
+    _hs_chk_systemd "armor"                             "Rapid7 NG AV"
+    _hs_chk_systemd "bdsec"                             "Bitdefender EDR / GavityZone XDR"
+    _hs_chk_systemd "cbsensor"                          "CarbonBlack"
+    _hs_chk_systemd "cybereason-sensor"                 "Cybereason"
+    _hs_chk_systemd "cylancesvc"                        "Blackberry cyPROTECT"
+    _hs_chk_systemd "cyoptics"                          "Blackberry cyOPTICS"
+    _hs_chk_systemd "ds_agent"                          "Trend Micro"
+    _hs_chk_systemd "elastic-agent"                     "Elastic Security"
+    _hs_chk_systemd "eea"                               "ESET AV"
+    _hs_chk_systemd "eea-user-agent"                    "ESET AV agent"
+    _hs_chk_systemd "emit_scand_service"                "WithSecure (F-Secure) Elements Agent"
+    _hs_chk_systemd "falcon-sensor"                     "CrowdStrike"
+    _hs_chk_systemd "f-secure-linuxsecurity-activate"   "WithSecure (F-Secure) Elements Agent"
+    _hs_chk_systemd "ir_agent"                          "Rapid7 INSIGHT IDR"
+    _hs_chk_systemd "keeperx"                           "IBM QRADAR"
+    _hs_chk_systemd "MFEcma"                            "McAfee"
+    _hs_chk_systemd "mdatp"                             "MS defender"
+    _hs_chk_systemd "osqueryd"                          "OSQuery"
+    _hs_chk_systemd "sophoslinuxsensor"                 "Sophos Intercept X"
+    _hs_chk_systemd "sophos-spl"                        "Sophos SPL"
+    _hs_chk_systemd "sraagent"                          "ESET Endpoint Security"
+    _hs_chk_systemd "traps_pmd"                         "Palo Alto Networks Cortex XDR"
+    _hs_chk_systemd "wazuh-agent"                       "Wazuh"
 
     [ -n "$out" ] && {
         echo -e "${CR}AV/EDR found ${CF}"
@@ -913,7 +928,7 @@ _warn_edr() {
         echo -en "${CN}"
     }
 
-    unset -f _hs_chk_systemd
+    unset -f _hs_chk_systemd _hs_chk_fn
 }
 
 _hs_gen_home() {
@@ -1563,6 +1578,7 @@ hs_init_shell
 xhelp
 
 ### Finishing
+[ -n "$HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}source <(curl -SsfL ${_HSURL})${CDM}'${CN}"
 echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
 echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
 echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
