@@ -18,7 +18,7 @@
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
 #    HOMEDIR=       Loot location of /home [default: /home]
 #
-# 2024 by theM0ntarCann0n & Messede & skpr
+# 2024 by Messede, DoomeD, skpr
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
 _HSURLORIGIN=
@@ -886,15 +886,21 @@ _warn_edr() {
     _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
     _hs_chk_fn() { { [ -z "${1}" ] || [ ! -f "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
-    _hs_chk_fn "/etc/clamd.d/scan.conf"            "ClamAV"
-    _hs_chk_fn "$(command -v clamscan)"            "ClamAV"
-    _hs_chk_fn "/opt/CrowdStrike/falconctl"        "CrowdShite"
-    _hs_chk_fn "/var/opt/ds_agent/dsa_core/ds_agent.db"   "Trend Micro Deep Security Agent"
-    _hs_chk_fn "/opt/ds_agent/dsa"                        "Trend Micro Deep Security Agent"
-    _hs_chk_fn "/etc/freshclam.conf"               "ClamAV"          
-    _hs_chk_fn "/etc/rkhunter.conf"                "RootKit Hunter"
-    _hs_chk_fn "$(command -v rkhunter)"            "RootKit Hunter"
-    _hs_chk_fn "/sf/edr/agent/bin/edr_agent"       "Sangfor EDR"
+    _hs_chk_fn "/etc/clamd.d/scan.conf"                     "ClamAV"
+    _hs_chk_fn "$(command -v clamscan)"                     "ClamAV"
+    _hs_chk_fn "/etc/freshclam.conf"                        "ClamAV"
+    _hs_chk_fn "/opt/360sdforcnos/eppagent"                 "EDR ?"
+    _hs_chk_fn "/opt/CrowdStrike/falconctl"                 "CrowdShite"
+    _hs_chk_fn "/var/opt/ds_agent/dsa_core/ds_agent.db"     "Trend Micro Deep Security Agent"
+    _hs_chk_fn "/opt/ds_agent/dsa"                          "Trend Micro Deep Security Agent"
+    _hs_chk_fn "/etc/rkhunter.conf"                         "RootKit Hunter"
+    _hs_chk_fn "$(command -v rkhunter)"                     "RootKit Hunter"
+    _hs_chk_fn "/etc/safedog/sdsvrd.conf"                   "Safedog"
+    _hs_chk_fn "/etc/safedog/server/conf/sdsvrd.conf"       "Safedog"
+    _hs_chk_fn "/sf/edr/agent/bin/edr_agent"                "Sangfor EDR"
+    _hs_chk_fn "/titan/agent/agent_update.sh"               "Titan Agent"
+    _hs_chk_fn "/opt/threatbook/OneAV"                      "threatbook.OneAV"
+    _hs_chk_fn "/usr/bin/oneav_start"                       "threatbook.OneAV"
 
     [ "${#fns[@]}" -ne 0 ] && out="$(\ls -alrt "${fns[@]}")"$'\n'
 
@@ -918,6 +924,8 @@ _warn_edr() {
     _hs_chk_systemd "osqueryd"                          "OSQuery"
     _hs_chk_systemd "sophoslinuxsensor"                 "Sophos Intercept X"
     _hs_chk_systemd "sophos-spl"                        "Sophos SPL"
+    _hs_chk_systemd "titanagent"                        "Titanagent EDR"
+    _hs_chk_systemd "oneavd"                            "threatbook.OneAV"
     _hs_chk_systemd "sraagent"                          "ESET Endpoint Security"
     _hs_chk_systemd "traps_pmd"                         "Palo Alto Networks Cortex XDR"
     _hs_chk_systemd "wazuh-agent"                       "Wazuh"
