@@ -884,13 +884,14 @@ _warn_edr() {
     local fns s out
 
     _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
-    _hs_chk_fn() { { [ -z "${1}" ] || [ ! -f "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
+    _hs_chk_fn() { { [ -z "${1}" ] || [ ! -e "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
     _hs_chk_fn "/etc/clamd.d/scan.conf"                     "ClamAV"
     _hs_chk_fn "$(command -v clamscan)"                     "ClamAV"
     _hs_chk_fn "/etc/freshclam.conf"                        "ClamAV"
     _hs_chk_fn "/opt/360sdforcnos/eppagent"                 "EDR ?"
-    _hs_chk_fn "/opt/CrowdStrike/falconctl"                 "CrowdShite"
+    _hs_chk_fn "/opt/CrowdStrike"                           "CrowdShite"
+    _hs_chk_fn "/opt/kaspersky"                             "Kaspersky"
     _hs_chk_fn "/var/opt/ds_agent/dsa_core/ds_agent.db"     "Trend Micro Deep Security Agent"
     _hs_chk_fn "/opt/ds_agent/dsa"                          "Trend Micro Deep Security Agent"
     _hs_chk_fn "/etc/rkhunter.conf"                         "RootKit Hunter"
@@ -918,6 +919,7 @@ _warn_edr() {
     _hs_chk_systemd "falcon-sensor"                     "CrowdStrike"
     _hs_chk_systemd "f-secure-linuxsecurity-activate"   "WithSecure (F-Secure) Elements Agent"
     _hs_chk_systemd "ir_agent"                          "Rapid7 INSIGHT IDR"
+    _hs_chk_systemd "klnagent64"                        "Kaspersky Network Agent"
     _hs_chk_systemd "keeperx"                           "IBM QRADAR"
     _hs_chk_systemd "MFEcma"                            "McAfee"
     _hs_chk_systemd "mdatp"                             "MS defender"
@@ -1039,8 +1041,8 @@ lootmore() {
         [ -z "$str" ] && continue
         echo -e "${CB}Interesting commands ${CDY}${hn}/.[bash|zsh]_history${CF}"
         echo "$str"
+        echo -en "${CN}"
     done
-    echo -en "${CN}"
 
     command -v lastlog >/dev/null && {
         echo -e "${CB}Logins ${CDY}${CF}"
