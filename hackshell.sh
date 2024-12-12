@@ -131,7 +131,7 @@ xsu() {
     h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)"
     # Not all systems support unset -n
     # unset -n _HS_HOME_ORIG
-    echo >&2 -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
+    [ $# -le 0 ] && echo >&2 -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
     bak="$_HS_HOME_ORIG"
     unset _HS_HOME_ORIG
     LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});${pcmd}"
