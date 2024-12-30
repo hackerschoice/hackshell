@@ -340,7 +340,7 @@ xor() {
     perl -e 'while(<>){foreach $c (split //){print $c^chr('"${1:-0xfa}"');}}'
 }
 
-xorpipe() { xor | sed 's/\r/\n/g'; }
+xorpipe() { xor "${1:-0xfa}" | sed 's/\r/\n/g'; }
 
 # HS_TRANSFER_PROVIDER="transfer.sh"
 HS_TRANSFER_PROVIDER="oshi.at"
@@ -623,53 +623,40 @@ dbin() {
     [ $# -eq 0 ] && { HS_INFO "Example: ${CDC}dbin install nmap"; }
 }
 
-bin() {
-    local arch arch_alt os
-    local a
-    local single="${1}"
-    local is_showhelp=1
+bin_dl() {
+    local dst="${XHOME}/${1:?}"
+    local str="${CDM}Downloading ${CDC}${1:?}${CDM}........................................"
+    local is_skip
 
-    arch="$(uname -m)"
-    os="$(uname -s)"
-    [ -z "$os" ] && os="Linux"
-    [ -z "$arch" ] && arch="x86_64"
+    # dl a single binary (not "all").
     [ -n "$single" ] && {
-        FORCE=1 # implied. Always download even if systemwide exists
-        unset is_showhelp
+        [ -n "$_HS_SINGLE_MATCH" ] && return # already tried to download
+        [ "$single" != "$1" ] && { unset _HS_SINGLE_MATCH; return; }
+        _HS_SINGLE_MATCH=1
     }
 
-    a="${arch}"
-    [ "$arch" == "x86_64" ] && arch_alt="amd64"
-    [ "$arch" == "aarch64" ] && arch_alt="arm64"
-    [ -z "$arch_alt" ] && arch_alt="$arch"
-    hs_mkxhome
-    bin_dl() {
-        local dst="${XHOME}/${1:?}"
-        local str="${CDM}Downloading ${CDC}${1:?}${CDM}........................................"
-        local is_skip
-        [ -n "$single" ] && {
-            [ -n "$_HS_SINGLE_MATCH" ] && return # already tried to download
-            [ "$single" != "$1" ] && { unset _HS_SINGLE_MATCH; return; }
-            _HS_SINGLE_MATCH=1
-        }
-        echo -en "${str:0:64}"
-        [ -s "${dst}" ] || rm -f "${dst:?}" 2>/dev/null
-        [ -z "$FORCE" ] && which "${1}" &>/dev/null && is_skip=1
-        [ -n "$FORCE" ] && [ -s "$dst" ] && is_skip=1
-        [ -n "$is_skip" ] && { echo -e "[${CDY}SKIPPED${CDM}]${CN}"; return 0; }
-        { err=$(dl "${2:?}"  2>&1 >&3 3>&-); } >"${dst}" 3>&1 || {
-            rm -f "${dst:?}" 2>/dev/null
-            if [ -z "$UNSAFE" ] && [[ "$err" == *"$_HS_SSL_ERR"* ]]; then
-                echo -e ".[${CR}FAILED${CDM}]${CN}${CF}\n---> ${2}\n---> ${err}\n---> Try ${CDC}export UNSAFE=1${CN}"
-            else
-                echo -e ".[${CR}FAILED${CDM}]${CN}${CF}\n---> ${2}\n---> ${err}${CN}"
-            fi
-            return 255
-        }
-        chmod 711 "${dst}"
-        echo -e ".....[${CDG}OK${CDM}]${CN}"
+    echo -en "${str:0:64}"
+    [ -s "${dst}" ] || rm -f "${dst:?}" 2>/dev/null
+    [ -z "$FORCE" ] && which "${1}" &>/dev/null && is_skip=1
+    [ -n "$FORCE" ] && [ -s "$dst" ] && is_skip=1
+    [ -n "$is_skip" ] && { echo -e "[${CDY}SKIPPED${CDM}]${CN}"; return 0; }
+    { err=$(dl "${2:?}"  2>&1 >&3 3>&-); } >"${dst}" 3>&1 || {
+        rm -f "${dst:?}" 2>/dev/null
+        if [ -z "$UNSAFE" ] && [[ "$err" == *"$_HS_SSL_ERR"* ]]; then
+            echo -e ".[${CR}FAILED${CDM}]${CN}${CF}\n---> ${2}\n---> ${err}\n---> Try ${CDC}export UNSAFE=1${CN}"
+        else
+            echo -e ".[${CR}FAILED${CDM}]${CN}${CF}\n---> ${2}\n---> ${err}${CN}"
+        fi
+        return 255
     }
+    chmod 711 "${dst}"
+    echo -e ".....[${CDG}OK${CDM}]${CN}"
+}
 
+_bin_single() {
+    local single="${1}" # might be empty "".
+
+    unset _HS_SINGLE_MATCH
     # bin_dl anew         "https://bin.ajam.dev/${a}/anew-rs" # fuck anew-rs, it needs argv[1] and is not compatible.
     bin_dl anew         "https://bin.ajam.dev/${a}/anew"
     bin_dl awk          "https://bin.ajam.dev/${a}/Baseutils/gawk/gawk"
@@ -683,6 +670,7 @@ bin() {
 
     bin_dl fd           "https://bin.ajam.dev/${a}/fd-find"
 
+    bin_dl gost         "https://bin.ajam.dev/${a}/gost"
     bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
     # bin_dl gs-netcat    "https://bin.ajam.dev/${a}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
     bin_dl grep         "https://bin.ajam.dev/${a}/Baseutils/grep/grep"
@@ -708,28 +696,48 @@ bin() {
     bin_dl tar          "https://bin.ajam.dev/${a}/Baseutils/tar/tar"
     bin_dl tcpdump      "https://bin.ajam.dev/${a}/tcpdump"
     bin_dl zapper       "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${arch}"
-    # bin_dl zapper       "https://bin.ajam.dev/${a}/zapper" #built from src @2-3 days
     bin_dl zgrep        "https://bin.ajam.dev/${a}/Baseutils/gzip/zgrep"
 
     [ -n "$single" ] && [ -z "$_HS_SINGLE_MATCH" ] && {
         local str="${single##*/}"
         local loc="${single}"
-        unset single
-        [ "$str" == "cme" ] && HS_WARN "CME is obsolete. Try netexec."
-        [ "$str" == "crackmapexec" ] && HS_WARN "CrackMapExec is obsolete. Try netexec."
+        [ "$str" == "cme" ] && HS_WARN "CME is obsolete. Try ${CDC}bin netexec${CN}"
+        [ "$str" == "crackmapexec" ] && HS_WARN "CrackMapExec is obsolete. Try ${CDC}bin netexec${CN}"
         bin_dl "${str}" "https://bin.ajam.dev/${a}/${loc}"
     }
-    unset _HS_SINGLE_MATCH
-    [ -n "$is_showhelp" ] && {
+}
+
+bin() {
+    local arch arch_alt os
+    local a
+    local optsstr="$*"
+
+    hs_mkxhome
+    arch="$(uname -m)"
+    os="$(uname -s)"
+    [ -z "$os" ] && os="Linux"
+    [ -z "$arch" ] && arch="x86_64"
+    a="${arch}"
+    [ "$arch" == "x86_64" ] && arch_alt="amd64"
+    [ "$arch" == "aarch64" ] && arch_alt="arm64"
+    [ -z "$arch_alt" ] && arch_alt="$arch"
+
+    if [ $# -eq 0 ]; then
+        _bin_single # install all
         [ -z "$FORCE" ] && echo -e ">>> Use ${CDC}FORCE=1 bin${CN} to download all" 
         echo -e ">>> Use ${CDC}bin <name>${CN} to download a specific binary"
-        echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line options
->>> from your current shell and all further processes."
-        echo -e ">>> ${CDG}Download COMPLETE${CN}"
-    }
+    else 
+        while [ $# -gt 0 ]; do
+            FORCE=1 _bin_single "$1"
+            shift 1
+        done
+    fi
 
+    { [[ "$optsstr" == *"zapper"* ]] || [[ -z "$optsstr" ]]; } && echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line options\n>>> from your current shell and all further processes."
+
+    echo -e ">>> ${CDG}Download COMPLETE${CN}"
+    unset _HS_SINGLE_MATCH
     hs_init_alias_reinit
-    unset -f bin_dl
 }
 
 loot_sshkey() {
