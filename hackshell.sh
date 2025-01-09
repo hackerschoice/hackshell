@@ -1431,12 +1431,11 @@ _hs_try_resize() {
 }
 
 _hs_mk_pty() {
-    echo -e "${CDM}Upgrading to PTY Shell${CN}${CF}
-[Press Ctrl-c now and set ${CDC}${CF}export NOPTY=1${CN}${CF}]${CN} otherwise"
+    echo -e "${CDM}Upgrading to PTY Shell${CN}${CF} [disable with ${CDC}${CF}export NOPTY=1${CN}${CF}]${CN}"
     echo -e ">>> Press ${CDC}Ctrl-z${CN} now and cut & paste ${CDC}stty raw -echo icrnl opost; fg${CN}"
     echo -e ">>> ${CG}AFTERWARDS${CDG}, Press enter to continue"
     read -r
-    echo -e ">>> Cut & paste ${CDC} source <(curl -SsfL https://thc.org/hs)${CN}"
+    echo -e ">>> Cut & paste ${CDC} eval \"\$(curl -SsfL ${_HSURL})\"${CN}"
 
     if [ -n "$HS_PY" ]; then
         "${HS_PY:-python}" -c "import pty;" 2>/dev/null && exec "${HS_PY:-python}" -c "import pty; pty.spawn('${SHELL:-sh}')"
