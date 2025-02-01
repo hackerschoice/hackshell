@@ -1001,6 +1001,7 @@ _warn_edr() {
 
     [ "${#fns[@]}" -gt 0 ] && out+="$(\ls -alrtd "${fns[@]}")"$'\n'
 
+    [ -f "/etc/audit/audit.rules" ] && _hs_chk_systemd "auditd"             "Auditd [/etc/audit/rules.d]"
     _hs_chk_systemd "avast"                             "Avast"
     _hs_chk_systemd "bdsec"                             "Bitdefender EDR / GavityZone XDR"
     _hs_chk_systemd "cylancesvc"                        "Blackberry cyPROTECT"
