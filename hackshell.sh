@@ -207,8 +207,6 @@ ${opts_init}
 sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
 }
 
-
-
 surl() {
     local r="${1#*://}"
     local opts=("-quiet" "-ign_eof")
@@ -495,13 +493,13 @@ hide() {
 }
 
 _hs_xhome_init() {
-    [[ "$PATH" != *"$XHOME"* ]] && export PATH="${XHOME}:$PATH"
+    [[ "$PATH" != *"$XHOME"* ]] && export PATH="${XHOME}:${XHOME}/bin:$PATH"
 }
 
 hs_mkxhome() {
     _hs_xhome_init
     [ -d "${XHOME}" ] && return 255
-    mkdir -p "${XHOME:?}" 2>/dev/null || return
+    mkdir -p "${XHOME:?}/bin" 2>/dev/null || return
     echo -e ">>> Using ${CDY}XHOME=${XHOME}${CN}. ${CF}[will auto-destruct on exit]${CN}"
     echo -e ">>> Type ${CDC}xdestruct${CN} to erase ${CDY}${XHOME}${CN}"
     echo -e ">>> Type ${CDC}xkeep${CN} to disable auto-destruct on exit."
@@ -641,6 +639,17 @@ dbin() {
         hs_init_alias_reinit
     }
     [ $# -eq 0 ] && { HS_INFO "Example: ${CDC}dbin install nmap"; }
+}
+
+soar() {
+    hs_mkxhome
+    [ ! -f "${XHOME}/bin/soar" ] && {
+        dl "https://github.com/pkgforge/soar/releases/download/nightly/soar-${HS_ARCH}-linux" >"${XHOME}/bin/soar" || return
+        chmod 755 "${XHOME}/bin/soar"
+        export SOAR_ROOT="${XHOME}"
+        \soar sync
+    }
+    \soar "$@"
 }
 
 bin_dl() {
