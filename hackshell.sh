@@ -673,6 +673,13 @@ bin_dl() {
     echo -e ".....[${CDG}OK${CDM}]${CN}"
 }
 
+# Binary list are available from here:
+# - https://meta.pkgforge.dev/bincache/x86_64-Linux.json
+# - https://meta.pkgforge.dev/pkgcache/x86_64-Linux.json
+# The binaries are "somehow" accessible from here:
+# - https://pkgs.pkgforge.dev/ (must check each repo individually to find the binary).
+# The GitHub page is here (no binaries. Only build scripts)::
+# - https://github.com/pkgforge
 _bin_single() {
     local single="${1}" # might be empty "".
 
@@ -696,7 +703,7 @@ _bin_single() {
     bin_dl gost         "https://bin.pkgforge.dev/${a}/gost"
     bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
     # bin_dl gs-netcat    "https://bin.pkgforge.dev/${a}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
-    bin_dl grep         "https://bin.pkgforge.dev/${a}/grep"
+    # bin_dl grep         "https://bin.pkgforge.dev/${a}/grep"
     bin_dl gzip         "https://bin.pkgforge.dev/${a}/gzip"
     bin_dl hexdump      "https://bin.pkgforge.dev/${a}/hexdump"
     bin_dl jq           "https://bin.pkgforge.dev/${a}/jq"
@@ -1821,6 +1828,7 @@ hs_info() {
         u="${u%% *}"
         t="${x##* }"
         [[ "${t}" == "$mytty" ]] && continue
+        [[ "${t##*/}" == "ptmx" ]] && continue
         [[ "$((now - ${x%% *}))" -gt 3600 ]] && continue
         echo -e "${CR}Active user: ${CDY}${u} ${CY}${CF}${t}"
         ps a -o tty,pid,cmd 2>/dev/null | grep "${_HS_GREP_COLOR_NEVER[@]}" ^"${t#/dev/}" 2>/dev/null
