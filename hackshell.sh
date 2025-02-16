@@ -689,6 +689,7 @@ _bin_single() {
     # export DBIN_INSTALL_DIR="${XHOME}"
 
     bin_dl fd           "https://bin.pkgforge.dev/${a}/fd-find"
+    # bin_dl fd           "https://github.com/orgs/pkgforge/packages/container/package/bincache/fd/official/fd-find"
 
     bin_dl gost         "https://bin.pkgforge.dev/${a}/gost"
     bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
@@ -700,7 +701,8 @@ _bin_single() {
     bin_dl nc           "https://bin.pkgforge.dev/${a}/ncat"
     # bin_dl nc           "https://bin.pkgforge.dev/${a}/Baseutils/netcat/netcat" #: https://www.libressl.org/
     bin_dl netstat      "https://bin.pkgforge.dev/${a}/Baseutils/nettools/netstat"
-    bin_dl nmap         "https://bin.pkgforge.dev/${a}/nmap"
+    # bin_dl nmap         "https://bin.pkgforge.dev/${a}/nmap"
+    bin_dl nmap         "https://api.ghcr.pkgforge.dev/pkgforge/pkgcache/nmap/archive/sharun/alpine/nmap?tag=7.95-${a}-linux&download=nmap"
     bin_dl noseyparker  "https://bin.pkgforge.dev/${a}/noseyparker"
     # [ "$arch" = "x86_64" ] && bin_dl noseyparker "https://github.com/hackerschoice/binary/raw/main/tools/noseyparker-x86_64-static"
     bin_dl openssl      "https://bin.pkgforge.dev/${a}/Baseutils/openssl/openssl"
