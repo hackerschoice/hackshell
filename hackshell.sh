@@ -640,17 +640,26 @@ dbin() {
     [ $# -eq 0 ] && { HS_INFO "Example: ${CDC}dbin install nmap"; }
 }
 
+# soar add => Add file to SOAR_ROOT
+# soar dl  => Download to current directory
 xsoar() {
     hs_mkxhome
 
-    [ "$1" == "dl" ] && shift 1
-
     export SOAR_ROOT="${XHOME}"
+    # Some static bins, like nmap and bpftrace, come as appimage. This will
+    # stop them being mounted as fuse (which is very visible to the admin) and instead
+    # extract and run.
+    APPIMAGE_EXTRACT_AND_RUN=1
+    RUNTIME_EXTRACT_AND_RUN=1
+
     [ ! -f "${XHOME}/bin/soar" ] && {
         dl "https://github.com/pkgforge/soar/releases/download/nightly/soar-${HS_ARCH}-linux" >"${XHOME}/bin/soar" || return
         chmod 755 "${XHOME}/bin/soar"
         \soar sync
     }
+
+    { [ "$1" == "dl" ] || [ "$1" == "add" ] || [ "$1" == "run" ]; } && { \soar "$@"; return; }
+    # if no command given, then output directly.
     ( cd "${XHOME}/bin" && \soar dl "$@" )
 }
 
