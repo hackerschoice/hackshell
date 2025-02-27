@@ -689,6 +689,7 @@ bin_dl() {
             echo -e ".[${CR}FAILED${CDM}]${CN}${CF}\n---> ${2}\n---> ${err}\n---> Try ${CDC}export UNSAFE=1${CN}"
         else
             echo -e ".[${CR}FAILED${CDM}]${CN}${CF}\n---> ${2}\n---> ${err}${CN}"
+            [[ "$err" == *"404"* ]] && echo -e "${CDG}${CF}---> Ask https://github.com/pkgforge/bin/issues to add${CN}" 
         fi
         return 255
     }
