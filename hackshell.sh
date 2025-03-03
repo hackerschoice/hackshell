@@ -529,9 +529,82 @@ home() {
 
 xkeep() {
     touch "${XHOME}/.keep" 2>/dev/null
-    HS_INFO "Wont delete ${CDY}${XHOME}${CDM} on exit"
+    HS_INFO "Won't delete ${CDY}${XHOME}${CDM} on exit"
 }
 
+proxy() {
+    local proto host
+    local str="$1"
+
+    proto="socks5h://"
+    [[ "${str}" == *"://"* ]] && proto="${str%%://*}://"
+    str="${str#*://}"
+    [[ "${str}" != *"."* ]] && str="127.0.0.1:${str}"
+    IFS=: read -r host port <<<"${str}"
+    [ -z "$port" ] && port=1080
+    export http_proxy="${proto}${host:-127.0.0.1}:${port}"
+    export https_proxy="${proto}${host:-127.0.0.1}:${port}"
+    echo "Proxy env variables set to ${CDM}$http_proxy${CN}. Type ${CDC}unproxy${CN} to unset."
+}
+
+unproxy() {
+    unset http_proxy
+    unset https_proxy
+}
+
+# A fool's token. Not secure. Can be recovered by target's admin.
+# Good enough for simple encrypt/decrypt and for data-in-transit.
+_hs_enc_init() {
+    local str
+    [ -n "$HS_TOKEN" ] && return
+    [ -n "$GS_TOKEN" ] && { HS_TOKEN="$GS_TOKEN"; return; }
+    command -v hostnamectl >/dev/null && HS_TOKEN="$(hostnamectl | grep -Fm1 'Machine ID' | openssl sha256 -binary | openssl base64)"
+    [ -z "$HS_TOKEN" ] && HS_TOKEN="$(openssl rand -base64 24)"
+    HS_TOKEN="${HS_TOKEN//[^a-zA-Z0-9]/}"
+    HS_TOKEN="${HS_TOKEN:0:16}"
+
+    echo -e 1>&2 "Using ${CDY}${CF}HS_TOKEN=${CDY}${HS_TOKEN}${CN} ${CF}[auto-generated]${CN}"
+}
+
+# Encrypt/Decrypt. Use memory only.
+# enc <file>  - Encrypt file
+# enc        - Encrypt stdin
+enc() {
+    local data
+    _hs_dep openssl
+
+    _hs_enc_init
+    [ $# -eq 0 ] && {
+        # Encrypt
+        openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}"
+        return
+    }
+
+    # Check if already encrypted:
+    openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" <"${1}" &>/dev/null && { HS_WARN "Already encrypted"; return; }
+
+    data="$(openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" -a <"${1}")"
+    openssl base64 -d <<<"${data}" >"${1}"
+}
+
+dec() {
+    local data
+    _hs_dep openssl
+
+    _hs_enc_init
+    [ $# -eq 0 ] && {
+        # Decrypt
+        openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}"
+        return
+    }
+    # Decrypt
+
+    # Check if encrypted:
+    openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" <"${1}" &>/dev/null || { HS_WARN "Not encrypted or wrong HS_TOKEN."; return; }
+
+    data="$(openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" <"${1}" | openssl base64)" || { HS_WARN "Not encrypted or wrong HS_TOKEN."; return; }
+    openssl base64 -d <<<"${data}" >"${1}"
+}
 
 tit() {
     local str
@@ -1907,6 +1980,7 @@ ${CDC} ghostip                               ${CDM}Originate from a non-existing
 ${CDC} burl http://ipinfo.io 2>/dev/null     ${CDM}Request URL ${CN}${CF}[no https support]
 ${CDC} dl http://ipinfo.io 2>/dev/null       ${CDM}Request URL using one of curl/wget/python/perl/openssl
 ${CDC} transfer <file>                       ${CDM}Upload a file or directory ${CN}${CF}[${HS_TRANSFER_PROVIDER}]
+${CDC} enc <file> / dec <file>               ${CDM}Encrypt/Decrypt file or stdin/stdout ${CN}${CF}[HS_TOKEN=${HS_TOKEN:-<secret>}]${CN}
 ${CDC} shred file                            ${CDM}Securely delete a file
 ${CDC} notime <file> touch foo.dat           ${CDM}Execute a command at the <file>'s mtime
 ${CDC} notime_cp <src> <dst>                 ${CDM}Copy file. Keep birth-time, ctime, mtime & atime
@@ -1930,10 +2004,9 @@ ${CDC} ws                                    ${CDM}WhatServer - display server's
 ${CDC} bin [<binary>]                        ${CDM}Download useful static binaries ${CN}${CF}[bin nmap]
 ${CDC} dbin                                  ${CDM}Download static binary ${CN}${CF}[xhelp dbin]
 ${CDC} zapme [<name>]                        ${CDM}Hide args of current shell as <name> + all child processes
+${CDC} xpty                                  ${CDM}Show all terminals / logged in users
 ${CDC} lt, ltr, lss, lssr, psg, lsg, ...     ${CDM}Common useful commands
-${CDC} xpty, ...                             ${CDM}Common useful commands
-${CDC} xhelp                                 ${CDM}This help"
-    echo -e "${CN}"
+${CDC} xhelp                                 ${CDM}This help${CN}\n"
     _hs_init_color
 }
 
