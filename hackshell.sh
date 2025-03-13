@@ -544,7 +544,7 @@ proxy() {
     [ -z "$port" ] && port=1080
     export http_proxy="${proto}${host:-127.0.0.1}:${port}"
     export https_proxy="${proto}${host:-127.0.0.1}:${port}"
-    echo "Proxy env variables set to ${CDM}$http_proxy${CN}. Type ${CDC}unproxy${CN} to unset."
+    echo -e "Proxy env variables set to ${CDM}$http_proxy${CN}. Type ${CDC}unproxy${CN} to unset."
 }
 
 unproxy() {
@@ -558,22 +558,23 @@ _hs_enc_init() {
     local str
     [ -n "$HS_TOKEN" ] && return
     [ -n "$GS_TOKEN" ] && { HS_TOKEN="$GS_TOKEN"; return; }
+    command -v openssl >/dev/null || return
     command -v hostnamectl >/dev/null && HS_TOKEN="$(hostnamectl | grep -Fm1 'Machine ID' | openssl sha256 -binary | openssl base64)"
     [ -z "$HS_TOKEN" ] && HS_TOKEN="$(openssl rand -base64 24)"
     HS_TOKEN="${HS_TOKEN//[^a-zA-Z0-9]/}"
     HS_TOKEN="${HS_TOKEN:0:16}"
-
-    echo -e 1>&2 "Using ${CDY}${CF}HS_TOKEN=${CDY}${HS_TOKEN}${CN} ${CF}[auto-generated]${CN}"
 }
 
 # Encrypt/Decrypt. Use memory only.
 # enc <file>  - Encrypt file
-# enc        - Encrypt stdin
+# enc         - Encrypt stdin
 enc() {
     local data
     _hs_dep openssl
 
     _hs_enc_init
+    echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec${CN}" # ${CF}[auto-generated]${CN}"
+
     [ $# -eq 0 ] && {
         # Encrypt
         openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}"
@@ -1208,7 +1209,7 @@ xpty() {
     local our_pty="$(tty)"
     our_pty="${our_pty##*/}"
 
-    stat /dev/pts/* -c '%n %X %U' |
+    stat /dev/pts/* -c '%n %X %U' 2>/dev/null |
     our_pty="$our_pty" awk -v now="$(date +%s)" '$1 ~ /\/[0-9]+$/ {
       gsub( /[^0-9]/, "", $1 )
       list[$1]=now-$2 "\t PTY " $1 " user " $3
@@ -1818,6 +1819,8 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
         HS_SSH_OPT+=("-oServerAliveInterval=30")
     }
 
+    _hs_enc_init
+
     # BusyBox timeout variant needs -t
     command -v timeout >/dev/null && timeout -t0 sleep 0 &>/dev/null && HS_TO_OPTS=("-t")
     hs_init_dl
@@ -1947,7 +1950,7 @@ hs_info() {
     echo -e "${CN}"
 
     # Show if any active PTY
-    stat /dev/pts/* -c '%X %U %n' | while read -r x; do
+    stat /dev/pts/* -c '%X %U %n' 2>/dev/null | while read -r x; do
         u="${x#* }"
         u="${u%% *}"
         t="${x##* }"
