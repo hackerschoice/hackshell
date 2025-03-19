@@ -565,6 +565,15 @@ _hs_enc_init() {
     HS_TOKEN="${HS_TOKEN:0:16}"
 }
 
+# Return true if not yet marked as once.
+# _once <key>
+# Used to execute a command only once.
+_once() {
+    # Old bash don't support key/value pairs. Use eval-trick instead:
+    eval "[ -n \"\$_hs_once_$1\" ] && return 255"
+    eval "_hs_once_$1=1"
+}
+
 # Encrypt/Decrypt. Use memory only.
 # enc <file>  - Encrypt file
 # enc         - Encrypt stdin
@@ -573,10 +582,10 @@ enc() {
     _hs_dep openssl
 
     _hs_enc_init
-    echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec${CN}" # ${CF}[auto-generated]${CN}"
 
     [ $# -eq 0 ] && {
         # Encrypt
+        _once dec_help && echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec${CN}"
         openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}"
         return
     }
@@ -586,6 +595,7 @@ enc() {
 
     data="$(openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" -a <"${1}")"
     openssl base64 -d <<<"${data}" >"${1}"
+    _once dec_help && echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec '${1}'${CN}"
 }
 
 dec() {
@@ -1584,6 +1594,7 @@ _hs_try_resize() {
         # Normally it returns ROWS/25:COLS/80 but some systems return it reverse
         [ "${a[1]}" -ge "${a[2]}" ] && { R="${a[1]}"; a[1]="${a[2]}"; a[2]="${R}"; }
         stty sane rows "${a[1]}" cols "${a[2]}"
+        export COLUMNS="${a[2]}" LINES="${a[1]}"
     fi
 }
 
