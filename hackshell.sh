@@ -1639,7 +1639,7 @@ _memexec() {
 
     _hs_dep perl || return
     shift
-    perl '-efor(319,279){($f=syscall$_,$",1)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV' -- "$@"
+    perl '-e$^F=255;for(319,279,385,314){($f=syscall$_,$",1)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV' -- "$@"
     return $?
 }
 
