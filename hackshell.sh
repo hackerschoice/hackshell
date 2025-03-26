@@ -1532,8 +1532,8 @@ loot() {
         }
     }
 
-    loot_cmd "Screen (screen -ls)" screen -ls
-    loot_cmd "Tmux" tmux list-s
+    command -v screen >/dev/null && loot_cmd "Screen (screen -ls)" screen -ls
+    command -v tmux >/dev/null && loot_cmd "Tmux" tmux list-s
 
     [ "$UID" -gt 0 ] && {
         echo -e "${CW}TIP:${CN} Type ${CDC}sudo -v${CN} and ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
@@ -1780,6 +1780,8 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     [ -n "$_HS_HOME_ORIG" ] && export HOME="$_HS_HOME_ORIG"
     export _HS_HOME_ORIG="$HOME"
 
+    # Do never ask to have a package installed
+    unset command_not_found_handle
     # Favour python3 over python2
     [ -z "${HS_PY}" ] && HS_PY="$(command -v python3)"
     [ -z "${HS_PY}" ] && HS_PY="$(command -v python)"
