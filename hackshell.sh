@@ -1791,6 +1791,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     unset TERM
     toe -a 2>/dev/null | grep -qm1 'xterm-256color' && TERM="xterm-256color"
     [ -z "$TERM" ] && TERM=xterm
+    export TERM
 
     HS_ARCH="$(uname -m 2>/dev/null)"
     [ -z "$HS_ARCH" ] && HS_ARCH="x86_64"
