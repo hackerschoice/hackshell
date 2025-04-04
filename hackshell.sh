@@ -1273,7 +1273,7 @@ _hs_gen_home() {
         [ -d "$fn" ] && str+="$fn"$'\n'
     else
         # str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
-        str="$({ find "${ROOTFS}${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; cat "${ROOTFS}/etc/passwd" 2>/dev/null | awk -F':' '{print $6}' 2>/dev/null | while read -r d; do [ ! -d "${ROOTFS}$d" ] && continue; [[ "$d" == "/" || "$d" == "/bin" || "$d" == "/sbin" ]] && continue; echo "${ROOTFS}$d"; done; } | sort -u)"
+        str="$({ find "${ROOTFS}${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; cat "${ROOTFS}/etc/passwd" 2>/dev/null | awk -F':' '{print $6}' 2>/dev/null | while read -r d; do [ ! -d "${ROOTFS}$d" ] && continue; [[ "$d" == "/" || "$d" == "/bin" || "$d" == "/sbin" ]] && continue; echo "${ROOTFS}${d%/}"; done; } | sort -u)"
         [ -d "${ROOTFS}/var/www" ] && [[ "$str" != *"/var/www"* ]] && str+="${ROOTFS}/var/www"$'\n'
     fi
 
