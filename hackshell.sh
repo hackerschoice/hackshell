@@ -589,14 +589,14 @@ enc() {
     [ $# -eq 0 ] && {
         # Encrypt
         _once dec_help && echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec${CN}"
-        openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}"
+        openssl enc "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" 2>/dev/null
         return
     }
 
     # Check if already encrypted:
-    openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" <"${1}" &>/dev/null && { HS_WARN "Already encrypted"; return; }
+    openssl enc -d "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" <"${1}" &>/dev/null && { HS_WARN "Already encrypted"; return; }
 
-    data="$(openssl enc -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" -a <"${1}")"
+    data="$(openssl enc "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" -a <"${1}" 2>/dev/null)"
     openssl base64 -d <<<"${data}" >"${1}"
     _once dec_help && echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec '${1}'${CN}"
 }
@@ -607,16 +607,14 @@ dec() {
 
     _hs_enc_init
     [ $# -eq 0 ] && {
-        # Decrypt
-        openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}"
+        openssl enc -d "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" 2>/dev/null
         return
     }
-    # Decrypt
-
     # Check if encrypted:
-    openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" <"${1}" &>/dev/null || { HS_WARN "Not encrypted or wrong HS_TOKEN."; return; }
+    openssl enc -d "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" <"${1}" &>/dev/null || { HS_WARN "Not encrypted or wrong HS_TOKEN."; return; }
 
-    data="$(openssl enc -d -aes-256-cbc -pbkdf2 -nosalt -k "${HS_TOKEN:?}" <"${1}" | openssl base64)" || { HS_WARN "Not encrypted or wrong HS_TOKEN."; return; }
+    data="$(openssl enc -d "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" <"${1}" 2>/dev/null | openssl base64)" || { HS_WARN "Not encrypted or wrong HS_TOKEN."; return; }
+    [ -z "$data" ] && { HS_WARN "Failed to decrypt."; return; }
     openssl base64 -d <<<"${data}" >"${1}"
 }
 
@@ -1371,6 +1369,26 @@ _lootmore_docker() {
     echo -en "${CN}"
 }
 
+_lootmore_lxc() {
+    command -v pct >/dev/null || return
+
+    str="$(pct list 2>/dev/null | grep -v ^VMID)"
+    [ -z "$str" ] && return
+    echo -e "${CB}LXC ${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
+_lootmore_vz() {
+    command -v vzlist >/dev/null || return
+
+    str="$(vzlist -a -t -H 2>/dev/null)"
+    [ -z "$str" ] && return
+    echo -e "${CB}OpenVZ${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
 lootmore() {
     local hn fn str arr
 
@@ -1422,6 +1440,8 @@ lootmore() {
     }
     _lootmore_last
     _lootmore_docker
+    _lootmore_lxc
+    _lootmore_vz
 
     str="$(grep -sE '^[[:digit:]]' "${ROOTFS}/etc/hosts" |grep -vF -e localhost -e 127.0.0.1)"
     [ -n "$str" ] && {
@@ -1802,6 +1822,10 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     [ "$HS_ARCH" == "aarch64" ] && HS_ARCH_ALT="arm64"
     [ -z "$HS_ARCH_ALT" ] && HS_ARCH_ALT="$HS_ARCH"
 
+    # Old OpenSSL don't have -pbkdf2.
+    # _HS_SSL_OPTS=("-aes-256-cbc" "-pbkdf2" "-nosalt" "-k")
+    _HS_SSL_OPTS=("-aes-256-cbc" "-md" "sha256" "-nosalt" "-k")
+
     _HS_GREP_COLOR_NEVER=()
     echo test | grep --color=never -qF test 2>/dev/null && _HS_GREP_COLOR_NEVER=("--color=never")
 
@@ -2061,5 +2085,5 @@ lootlight
 unset -f hs_init hs_init_alias hs_init_dl hs_init_shell
 unset SSH_CONNECTION SSH_CLIENT _HSURLORIGIN
 
-# Do exit with TRUE in case parent shell ues 'set -e':
+# Exit with TRUE in case parent shell ues 'set -e':
 :
