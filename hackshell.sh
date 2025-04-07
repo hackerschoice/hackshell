@@ -1369,12 +1369,29 @@ _lootmore_docker() {
     echo -en "${CN}"
 }
 
-_lootmore_lxc() {
-    command -v pct >/dev/null || return
+_lootmore_pct() {
+    command -v pct >/dev/null || { unset _HS_LOOT_PCT; return; }
 
+    # lxc-ls
+    # for x in $(lxc-ls); do lxc-info -n "$x" -s -i; done
     str="$(pct list 2>/dev/null | grep -v ^VMID)"
     [ -z "$str" ] && return
-    echo -e "${CB}LXC ${CDY}${CF}"
+    echo -e "${CB}Proxmox VMs${CF} [try lxc-ls]${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+    _HS_LOOT_PCT=1
+}
+
+_lootmore_lxc() {
+    # Skip if already looted ProxMox (it uses lxc)
+    [ -n "$_LS_LOOT_PCT" ] && return
+
+    command -v lxc-ls >/dev/null || return
+    command -v lxc-info >/dev/null || return
+
+    str="$(for x in $(lxc-ls); do lxc-info -n "$x" -sip 2>/dev/null; done)"
+    [ -z "$str" ] && return
+    echo -e "${CB}LXC Containers${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
 }
@@ -1440,6 +1457,7 @@ lootmore() {
     }
     _lootmore_last
     _lootmore_docker
+    _lootmore_pct
     _lootmore_lxc
     _lootmore_vz
 
