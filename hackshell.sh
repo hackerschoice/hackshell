@@ -370,7 +370,18 @@ transfer() {
     [[ ! -t 0 ]] && { curl "${opts[@]}" "-" "https://${HS_TRANSFER_PROVIDER}/${1}"; return; }
     [[ ! -e "$1" ]] && { echo -e >&2 "Not found: $1"; return 255; }
     [[ -d "$1" ]] && { (cd "${1}/.." && tar cfz - "${1##*/}")|curl "${opts[@]}" "-" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}.tar.gz}"; return; }
-    curl "${opts[@]}" "$1" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}}"
+    curl "${opts[@]}" "$1" "https://${HS_TRANSFER_PROVIDER}/${2:-${1##*/}}" || echo -e >&2 "Try ${CDC}tb <file>${CN} instead [WARNING: not encrypted]."
+}
+
+tb() {
+    _hs_dep nc || return
+
+    [ $# -eq 0 ] && {
+        [ -t 0 ] && { echo -e >&2 "Usage:\n    tb <file>"; return 255; }
+        nc termbin.com 9999
+        return
+    }
+    nc terbmin.com 9999 <"$1"
 }
 
 # SHRED without shred command
@@ -562,7 +573,7 @@ _hs_enc_init() {
     [ -n "$HS_TOKEN" ] && return
     [ -n "$GS_TOKEN" ] && { HS_TOKEN="$GS_TOKEN"; return; }
     command -v openssl >/dev/null || return
-    command -v hostnamectl >/dev/null && HS_TOKEN="$(hostnamectl | grep -Fm1 'Machine ID' | openssl sha256 -binary | openssl base64)"
+    [ -f "/etc/machine-id" ] && HS_TOKEN="$(openssl sha256 -binary <"/etc/machine-id" | openssl base64)"
     [ -z "$HS_TOKEN" ] && HS_TOKEN="$(openssl rand -base64 24)"
     HS_TOKEN="${HS_TOKEN//[^a-zA-Z0-9]/}"
     HS_TOKEN="${HS_TOKEN:0:16}"
