@@ -163,6 +163,19 @@ xtmux() {
     command -v fuser >/dev/null && { fuser "${sox}" || rm -f "${sox}"; }
 }
 
+ssh-known-host-check() {
+    local host="$1"
+    local fn="${2:-${_HS_HOME_ORIG:-$HOME}/.ssh/known_hosts}"
+
+    [ $# -eq 0 ] && { echo >&2 "ssh-known-host-check <IP> [known_hosts]"; return 255; }
+    
+    ssh-keygen -F "$host" -f "$fn" >/dev/null || {
+        echo -e "${CDR}ERROR${CN}: Host not found in ${CDY}$fn${CN}"
+        return 255
+    }
+    echo -e "${CDG}Host FOUND in ${CDY}$fn${CN}"
+}
+
 xssh() {
     local ttyp="$(stty -g)"
     local opts=()
