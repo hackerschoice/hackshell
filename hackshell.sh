@@ -1237,6 +1237,11 @@ _warn_edr() {
         echo -en "${CN}"
     }
 
+    [ -f /sys/kernel/debug/kprobes/list ] && out="$(</sys/kernel/debug/kprobes/list)" && [ -n "$out" ] && {
+        echo -e "${CR}kprobes found:${CF}"
+        echo "$out"
+        echo -en "${CN}"
+    }
     unset -f _hs_chk_systemd _hs_chk_fn
 }
 
