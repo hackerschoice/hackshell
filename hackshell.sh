@@ -163,17 +163,36 @@ xtmux() {
     command -v fuser >/dev/null && { fuser "${sox}" || rm -f "${sox}"; }
 }
 
-ssh-known-host-check() {
+ssh-known-hosts-check() {
     local host="$1"
     local fn="${2:-${_HS_HOME_ORIG:-$HOME}/.ssh/known_hosts}"
 
-    [ $# -eq 0 ] && { echo >&2 "ssh-known-host-check <IP> [known_hosts]"; return 255; }
+    [ $# -eq 0 ] && { echo >&2 "ssh-known-host-check <IP> [known_hosts file]"; return 255; }
     
     ssh-keygen -F "$host" -f "$fn" >/dev/null || {
         echo -e "${CDR}ERROR${CN}: Host not found in ${CDY}$fn${CN}"
         return 255
     }
     echo -e "${CDG}Host FOUND in ${CDY}$fn${CN}"
+}
+
+_ssh-known-hosts2hashcat() {
+    local l arr n=0
+    while read -r l; do
+        [ "${l:0:3}" != "|1|" ] && continue
+        IFS='| ' read -ra arr <<<"${l:3}"
+        echo "$(echo "${arr[1]}" | base64 -d | xxd -p):$(echo "${arr[0]}" | base64 -d | xxd -p)"
+        ((n++))
+    done
+    echo >&2 "Found ${n} hashes. Now use:
+  ${CDC}hashcat -m 160 --quiet --hex-salt known_hosts_converted.txt -a0 hosts.txt${CN}
+or try all IPv4:
+  ${CDC}curl -SsfL https://github.com/chris408/known_hosts-hashcat/raw/refs/heads/master/ipv4_hcmask.txt -O
+  hashcat -m 160 --quiet --hex-salt known_hosts_converted.txt -a3 ipv4_hcmask.txt${CN}"
+}
+
+ssh-known-hosts2hashcat() {
+    cat "${1:-/dev/stdin}" | _ssh-known-hosts2hashcat
 }
 
 xssh() {
