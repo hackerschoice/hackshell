@@ -394,7 +394,7 @@ tb() {
         nc termbin.com 9999
         return
     }
-    nc terbmin.com 9999 <"$1"
+    nc termbin.com 9999 <"$1"
 }
 
 # SHRED without shred command
@@ -860,7 +860,7 @@ _bin_single() {
     bin_dl tcpdump      "https://bin.pkgforge.dev/${HS_ARCH}/tcpdump"
     # bin_dl vi           "https://bin.pkgforge.dev/${HS_ARCH}/vi"
     bin_dl vim          "https://bin.pkgforge.dev/${HS_ARCH}/vim"
-    bin_dl zapper       "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${arch}"
+    bin_dl zapper       "https://github.com/hackerschoice/zapper/releases/latest/download/zapper-${os,,}-${HS_ARCH}"
     bin_dl zgrep        "https://bin.pkgforge.dev/${HS_ARCH}/zgrep"
 
     { [ -z "$single" ] || [ "$single" == "busybox" ]; } && {
@@ -1847,6 +1847,9 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     [ -n "$_HS_HOME_ORIG" ] && export HOME="$_HS_HOME_ORIG"
     export _HS_HOME_ORIG="$HOME"
 
+    # ZSH compat MacOS
+    command -v setopt >/dev/null && setopt +o nomatch
+
     # Do never ask to have a package installed
     unset command_not_found_handle
     # Favour python3 over python2
@@ -1865,8 +1868,8 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 
     HS_ARCH="$(uname -m 2>/dev/null)"
     [ -z "$HS_ARCH" ] && HS_ARCH="x86_64"
-    [ "$HS_ARCH" == "x86_64" ] && HS_ARCH_ALT="amd64"
-    [ "$HS_ARCH" == "aarch64" ] && HS_ARCH_ALT="arm64"
+    [ "$HS_ARCH" = "x86_64" ] && HS_ARCH_ALT="amd64"
+    [ "$HS_ARCH" = "aarch64" ] && HS_ARCH_ALT="arm64"
     [ -z "$HS_ARCH_ALT" ] && HS_ARCH_ALT="$HS_ARCH"
 
     # Old OpenSSL don't have -pbkdf2.
