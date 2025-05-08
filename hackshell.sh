@@ -20,6 +20,8 @@
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
 #    HOMEDIR=       Loot location of /home [default: /home]
 #    ROOTFS=        Set different root. [default: /]
+#    QUIET=         No TIPS and no startup messages.
+#    NOPTY=         Do not upgrade to PTY
 #
 # 2024-2025 by Messede, DoomeD, skpr
 # Similar work: https://github.com/zMarch/Orc
@@ -1320,7 +1322,7 @@ _hs_gen_home() {
     else
         # str="$({ find "${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d; awk -F':' '{print $6}' </etc/passwd 2>/dev/null | while read -r d; do [ -d "$d" ] && echo "$d"; done; [ -d /var/www ] && echo "/var/www"; } | sort -u)"
         str="$({ find "${ROOTFS}${HOMEDIR:-/home}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; cat "${ROOTFS}/etc/passwd" 2>/dev/null | awk -F':' '{print $6}' 2>/dev/null | while read -r d; do [ ! -d "${ROOTFS}$d" ] && continue; [[ "$d" == "/" || "$d" == "/bin" || "$d" == "/sbin" ]] && continue; echo "${ROOTFS}${d%/}"; done; } | sort -u)"
-        [ -d "${ROOTFS}/var/www" ] && [[ "$str" != *"/var/www"* ]] && str+="${ROOTFS}/var/www"$'\n'
+        [ -d "${ROOTFS}/var/www" ] && [[ "$str" != *"/var/www"* ]] && str+=$'\n'"${ROOTFS}/var/www"
     fi
 
     set -f
