@@ -1022,7 +1022,7 @@ _loot_openstack() {
     echo -e "${CB}OpenStack user_data${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
-    echo -e "${CW}TIP: ${CDC}"'dl "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
+    [ -z "$QUIET" ] && echo -e "${CW}TIP: ${CDC}"'dl "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
 }
 
 # FIXME: Search through environment variables of all running processes.
@@ -1097,7 +1097,7 @@ _loot_yandex() {
     echo -e "${CB}Yandex Cloud user-data (config)${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
-    echo -e "${CW}TIP: ${CDC}curl -SsfL 'http://169.254.169.254/computeMetadata/v1/instance/?alt=text&recursive=true' -H 'Metadata-Flavor:Google'${CN}"
+    [ -z "$QUIET" ] && echo -e "${CW}TIP: ${CDC}curl -SsfL 'http://169.254.169.254/computeMetadata/v1/instance/?alt=text&recursive=true' -H 'Metadata-Flavor:Google'${CN}"
 }
 
 # make GS-NETCAT command available if logged in via GSNC.
@@ -1517,7 +1517,7 @@ lootmore() {
     }
 
     unset HOMEDIRARR
-    [ -z "$ROOTFS" ] && echo -e "${CW}TIP:${CN} Type ${CDC}ws${CN} to find out more about this host."
+    [ -z "$ROOTFS" ] && [ -z "$QUIET" ] && echo -e "${CW}TIP:${CN} Type ${CDC}ws${CN} to find out more about this host."
 }
 
 # <NAME> <COMMAND> ...
@@ -1611,7 +1611,7 @@ loot() {
 
     [ -z "$_HS_NO_SSRF_169" ] && {
         # Found an SSRF
-        echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
+        [ -z "$QUIET" ] && echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf${CN}"
         [ -n "$_HS_GOT_SSRF_169" ] && {
             # Found and SSRF but could not get infos.
             echo -e "${CW}TIP:${CN} Try ${CDC}dl http://169.254.169.254/openstack${CN}"
@@ -1622,12 +1622,12 @@ loot() {
     command -v tmux >/dev/null && loot_cmd "Tmux" tmux list-s
 
     [ "$UID" -gt 0 ] && {
-        echo -e "${CW}TIP:${CN} Type ${CDC}sudo -v${CN} and ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
+        [ -z "$QUIET" ] && echo -e "${CW}TIP:${CN} Type ${CDC}sudo -v${CN} and ${CDC}sudo -ln${CN} to list sudo perms. ${CF}[may log to auth.log]${CN}"
     }
 
     lootlight
     unset HOMEDIRARR
-    [ -z "$ROOTFS" ] && {
+    [ -z "$ROOTFS" ] && [ -z "$QUIET" ] && {
         echo -e "${CW}TIP:${CN} Type ${CDC}lootmore${CN} to loot even more."
         [ -d "/vz/root" ] && echo -e "${CW}VMs found${CN}: Try ${CDC}"'for x in /vz/root/*; do ROOTFS="$x" loot; done'"${CN}"
     }
