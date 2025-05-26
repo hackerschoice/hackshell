@@ -1714,10 +1714,12 @@ _hs_mk_pty() {
     read -r
     echo -e ">>> Cut & paste ${CDC} eval \"\$(curl -SsfL ${_HSURL})\"${CN}"
 
+    # Some systems no not allow pty allocation.
+    # => Test if PTY allocation works and call exec therafter
     if [ -n "$HS_PY" ]; then
-        "${HS_PY:-python}" -c "import pty;" 2>/dev/null && exec "${HS_PY:-python}" -c "import pty; pty.spawn('${SHELL:-sh}')"
+        "${HS_PY:-python}" -c "import pty; pty.spawn(['${SHELL:-sh}', '-c' , 'true'])" 2>/dev/null && exec "${HS_PY:-python}" -c "import pty; pty.spawn('${SHELL:-sh}')"
     elif command -v script >/dev/null; then
-        exec script -qc "${SHELL:-sh}" /dev/null
+        script -qc "${SHELL:-sh} -c true" /dev/null && exec script -qc "${SHELL:-sh}" /dev/null
     fi
 
     HS_ERR "Not found: python or script"
