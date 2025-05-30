@@ -615,28 +615,28 @@ _hs_enc_init() {
     HS_TOKEN="${HS_TOKEN:0:16}"
 }
 
-# Return true if not yet marked as once.
-# _once <key>
-# Used to execute a command only once.
-_once() {
-    # Old bash don't support key/value pairs. Use eval-trick instead:
-    eval "[ -n \"\$_hs_once_$1\" ] && return 255"
-    eval "_hs_once_$1=1"
-}
-
 # Encrypt/Decrypt. Use memory only.
 # enc <file>  - Encrypt file
 # enc         - Encrypt stdin
 enc() {
     local data
-    _hs_dep openssl
+    declare -f _hs_dep >/dev/null && _hs_dep openssl
 
+    # Return true if not yet marked as once.
+    # _once <key>
+    # Used to execute a command only once.
+    _once() {
+        # Old bash don't support key/value pairs. Use eval-trick instead:
+        eval "[ -n \"\$_hs_once_$1\" ] && return 255"
+        eval "_hs_once_$1=1"
+    }
     _hs_enc_init
 
     [ $# -eq 0 ] && {
         # Encrypt
         _once dec_help && echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec${CN}"
         openssl enc "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" 2>/dev/null
+        unset -f _once
         return
     }
 
@@ -646,11 +646,12 @@ enc() {
     data="$(openssl enc "${_HS_SSL_OPTS[@]}" "${HS_TOKEN:?}" -a <"${1}" 2>/dev/null)"
     openssl base64 -d <<<"${data}" >"${1}"
     _once dec_help && echo -e 1>&2 "${CDY}>>>${CN} To decrypt, use: ${CDC}HS_TOKEN='${HS_TOKEN}' dec '${1}'${CN}"
+    unset -f _once
 }
 
 dec() {
     local data
-    _hs_dep openssl
+    declare -f _hs_dep >/dev/null && _hs_dep openssl
 
     _hs_enc_init
     [ $# -eq 0 ] && {
@@ -1967,20 +1968,26 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 cn() {
     local str
     local x509
-    _hs_dep openssl || return
-    _hs_dep sed || return
+    declare -f _hs_dep >/dev/null && {
+        _hs_dep openssl || return
+        _hs_dep sed || return
+    }
 
-    x509="$(timeout "${HS_TO_OPTS[@]}" 4 openssl s_client -showcerts -connect "${1:-127.0.0.1}:${2:-443}" 2>/dev/null </dev/null)"
+    if [ -s "$1" ]; then
+        x509="$(openssl x509 -text <"$1")"
+    else
+        x509="$(timeout "${HS_TO_OPTS[@]}" 4 openssl s_client -showcerts -connect "${1:-127.0.0.1}:${2:-443}" 2>/dev/null </dev/null)"
+    fi
     # Extract CN
     str="$(echo "$x509" | openssl x509 -noout -subject 2>/dev/null)"
-    [[ "$str" == "subject"* ]] && [[ "$str" == *"/CN"* ]] && {
+    [[ "$str" == "subject"* ]] && [[ "$str" =~ '[/ ,]{1}CN.*' ]] && {
         str="$(echo "$str" | sed '/^subject/s/^.*CN.*=[ ]*//g')"
-        echo "$str"
+        [ -n "$str" ] && echo "$str"
     }
 
     # Extract SAN
     str="$(echo "$x509" | openssl x509 -noout -ext subjectAltName 2>/dev/null | grep -F DNS: | sed 's/\s*DNS://g' | sed 's/[^-a-z0-9\.\*,]//g')"
-    echo "${str//,/$'\n'}"
+    [ -n "$str" ] && echo "${str//,/$'\n'}"
 }
 
 _scan_single() {
