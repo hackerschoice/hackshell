@@ -1973,7 +1973,11 @@ cn() {
         _hs_dep sed || return
     }
 
-    if [ -s "$1" ]; then
+    if [ $# -eq 0 ] && [ ! -t 0 ]; then
+    echo hi
+        x509="$(openssl x509 -text)"
+    elif [ -s "$1" ]; then
+    echo hif
         x509="$(openssl x509 -text <"$1")"
     else
         x509="$(timeout "${HS_TO_OPTS[@]}" 4 openssl s_client -showcerts -connect "${1:-127.0.0.1}:${2:-443}" 2>/dev/null </dev/null)"
