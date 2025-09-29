@@ -1314,6 +1314,8 @@ _warn_rk() {
 
     [ -z "$tainted" ] && return
     echo -e "${CR}Non standard LKM detected${CF} (/proc/sys/kernel/tainted=$n)"
+    str="$(dmesg | grep -F taint 2>/dev/null)"
+    [ -n "$str" ] && echo "$str"
     command -v modinfo >/dev/null && cat "/proc/modules" 2>/dev/null | while read -r m; do
         m="${m%% *}"
         str="$(modinfo "$m" 2>/dev/null)" || continue
