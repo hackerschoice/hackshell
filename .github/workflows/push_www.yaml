@@ -28,7 +28,7 @@ jobs:
         cd hackerschoice.github.io
         cmp -s /tmp/hackshell.sh hs  || { cat /tmp/hackshell.sh >hs; is_updated=1; }
 
-        [ -n $is_updated ] && {
+        [ -n "$is_updated" ] && {
           git config --local user.name "GitHub Action"
           git config --local user.email "root@proton.thc.org"
           git add hs && git commit -m "hackshell" && git push

