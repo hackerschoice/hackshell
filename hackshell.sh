@@ -1443,7 +1443,7 @@ lootlight() {
     local str
     ls -al "${ROOTFS}"/tmp/ssh-* &>/dev/null && {
         echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
-        find "${ROOFS}"/tmp -name 'agent.*' 2>/dev/null | while read -r fn; do
+        find "${ROOTFS}"/tmp -name 'agent.*' 2>/dev/null | while read -r fn; do
             unset str
             command -v lsof >/dev/null && lsof -n "$fn" &>/dev/null && str="[ACTIVE]"
             echo "$(ls -al "$fn")"$'\t'"${str}"
