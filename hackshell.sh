@@ -423,11 +423,17 @@ tb() {
 }
 
 # SHRED without shred command
-command -v shred >/dev/null || shred() {
+shred() {
+    [ -x /usr/bin/shred ] && {
+        /usr/bin/shred -u "$@"
+        return
+    }
     [[ -z $1 || ! -f "$1" ]] && { echo >&2 "shred [FILE]"; return 255; }
     dd status=none bs=1k count="$(du -sk "${1:?}" | cut -f1)" if=/dev/urandom >"$1"
     rm -f "${1:?}"
 }
+
+command -v srm >/dev/null || srm() { shred "$@"; }
 
 command -v strings >/dev/null || strings() { perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }
 
@@ -1291,6 +1297,21 @@ _warn_edr() {
     unset -f _hs_chk_systemd _hs_chk_fn
 }
 
+_warn_upx_exe() {
+    local str pid
+    for x in /proc/[123456789]*/exe; do
+        [ ! -e "$x" ] && continue
+        dd bs=1k count=1 if="$x" 2>/dev/null | grep -Fqam1 'UPX!' && {
+            pid="${x:6}"
+            pid="${pid%%/*}"
+            str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null)"$'\n'
+        }
+    done    
+    [ -z "$str" ] && return
+    echo -e "${CR}UPX packed process found:${CF}"
+    echo -en "${str}"$'\033[0m'
+}
+
 # Warn of script kiddies
 _warn_skids() {
     local str s
@@ -1312,7 +1333,7 @@ _warn_skids() {
     # grep -qFm1 '~/.tmp_u' ~/.bashrc 2>/dev/null && str+="Suspicious SSH authorized_key found: ~/.tmp.u"$'\n'
     grep -qFm1 'authorized_keys' ~/.bashrc 2>/dev/null && echo -e "${CR}Suspicious SSH authorized_key shenanigans found: ~/.bashrc${CN}"
 
-    s="$(grep -HoaFm1 XMRIG_VERSION /proc/*/exe 2>/dev/null | sed 's|[^0-9]||g')"
+    s="$(grep -HEoam1 '(XMRIG_VERSION|Id: UPX )' /proc/*/exe /dev/null 2>/dev/null | sed 's|[^0-9]||g')"
     [ -n "$s" ] && {
         echo -e "${CR}XMRig miner processes found:${CF}"
         # ps --no-headers -eo pid,%cpu,%mem,command => NOT PORTABLE
@@ -1385,11 +1406,13 @@ _warn_lkm() {
 _warn_rk_exe() {
     local str x out az t w
 
-    str="$(readlink -f /proc/*/exe 2>/dev/null | grep -E '(\(deleted\)$|^/memfd:)')"
+    # readlink -f wont work as non-root on /proc/*/exe if the binary is deleted.
+    str="$(stat --printf='%N\n' /proc/*/exe 2>/dev/null | grep -E '(\(deleted\)|^/memfd:)' 2>/dev/null)"
     [ -z "$str" ] && return
 
     for x in /proc/[123456789]*/exe; do
-        str="$(readlink -f "$x" | grep -E '(\(deleted\)$|^/memfd:)')"
+        [ ! -e "$x" ] && continue
+        str="$(stat --printf='%N' "$x" 2>/dev/null | grep -E '(\(deleted\)|^/memfd:)')"
         [ -z "$str" ] && continue
         x="${x:6}"
         x="${x%%/*}"
@@ -1407,12 +1430,12 @@ _warn_rk_exe() {
     echo -en "${CN}"
 }
 
+
 # Warn if there are other root kits found.
 _warn_rk() {
-    command -v readlink >/dev/null && _warn_rk_exe
+    command -v stat >/dev/null && _warn_rk_exe
     _warn_lkm
 }
-
 
 _hs_gen_home() {
     local IFS
@@ -1497,6 +1520,7 @@ lootlight() {
         _warn_edr
         _warn_rk
         _warn_skids
+        _warn_upx_exe
     }
     declare -f _extended_history >/dev/null && [ -n "$PROMPT_COMMAND" ] && {
         unset PROMPT_COMMAND
