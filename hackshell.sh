@@ -1167,6 +1167,7 @@ _warn_edr() {
     _hs_chk_fn "/etc/clamd.d/scan.conf"                     "ClamAV"
     _hs_chk_fn "$(command -v clamscan)"                     "ClamAV"
     _hs_chk_fn "/etc/freshclam.conf"                        "ClamAV"
+    _hs_chk_fn "/usr/local/cloudmonitor/bin/argusagent"     "CloudAgent"
     _hs_chk_fn "/opt/COMODO"                                "Comodo AV"
     _hs_chk_fn "/opt/CrowdStrike"                           "CrowdShite"
     _hs_chk_fn "/opt/cyberark"                              "CyberArk"
@@ -1192,6 +1193,7 @@ _warn_edr() {
     _hs_chk_fn "opt/logrhythm/scsm"                         "LogRhythm System Monitor"
     _hs_chk_fn "/etc/init.d/scsm"                           "LogRhythm System Monitor"
     _hs_chk_fn "/var/pt"                                    "PT Swarm"
+    _hs_chk_fn "/usr/local/qcloud/tat_agent/"               "Qcloud"
     _hs_chk_fn "/usr/local/qualys"                          "Qualys EDR Cloud Agent"
     _hs_chk_fn "/etc/init.d/qualys-cloud-agent"             "Qualys EDR Cloud Agent"
     _hs_chk_fn "/etc/rkhunter.conf"                         "RootKit Hunter [rkhunter -c -l /dev/shm/.rk --sk --nomow --rwo; rm -f /dev/shm/.rk]"
@@ -1200,6 +1202,7 @@ _warn_edr() {
     _hs_chk_fn "/etc/safedog/server/conf/sdsvrd.conf"       "Safedog"
     _hs_chk_fn "/sf/edr/agent/bin/edr_agent"                "Sangfor EDR"
     _hs_chk_fn "/opt/secureworks"                           "Secureworks"
+    _hs_chk_fn "/opt/sophos-av/"			     			"Sophos Anti-Virus"
     _hs_chk_fn "/opt/splunkforwarder"                       "Splunk"
     _hs_chk_fn "/opt/SumoCollector"                         "Sumo Logic Cloud SIEM"
     _hs_chk_fn "/etc/otelcol-sumo/sumologic.yaml"           "Sumo Logic OTEL Collector"
@@ -1229,6 +1232,7 @@ _warn_edr() {
     _hs_chk_systemd "cbsensor"                          "CarbonBlack"
     _hs_chk_systemd "cpla"                              "Checkpoint"
     _hs_chk_systemd "itsm"                              "Comodo Client Security"
+    _hs_chk_systemd "cloudmonitor"                      "Argus Cloud Agent"
     _hs_chk_systemd "falcon-sensor"                     "CrowdStrike"
     _hs_chk_systemd "epmd"                              "CyberArk"
     _hs_chk_systemd "cybereason-sensor"                 "Cybereason"
@@ -1299,17 +1303,33 @@ _warn_edr() {
 
 _warn_upx_exe() {
     local str pid
+    unset _HS_UPX_PIDS
     for x in /proc/[123456789]*/exe; do
         [ ! -e "$x" ] && continue
         dd bs=1k count=1 if="$x" 2>/dev/null | grep -Fqam1 'UPX!' && {
             pid="${x:6}"
             pid="${pid%%/*}"
-            str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null)"$'\n'
+            _HS_UPX_PIDS+=("${pid}")
+            str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null | tr '[\r\n]' ' ')"$'\n'
         }
     done    
     [ -z "$str" ] && return
     echo -e "${CR}UPX packed process found:${CF}"
     echo -en "${str}"$'\033[0m'
+}
+
+# <pid> <string-pattern>
+# - on Read-only sections (.text, .rodata) of the process memory
+# - Fixed string pattern match only
+_hs_gdb_proc_match() {
+    local pid="${1:?}"
+    local pattern="${2:?}"
+    grep -F ' r-' <"/proc/${pid}/maps" | cut -f1 -d" " | while read -r x; do
+        gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory /dev/stdout 0x${x%%-*} 0x${x##*-}" 2>/dev/null | grep -Fqam1 "${pattern}" && {
+            echo "${pid:-BAD}"
+            return 0
+        }
+    done
 }
 
 # Warn of script kiddies
@@ -1333,15 +1353,21 @@ _warn_skids() {
     # grep -qFm1 '~/.tmp_u' ~/.bashrc 2>/dev/null && str+="Suspicious SSH authorized_key found: ~/.tmp.u"$'\n'
     grep -qFm1 'authorized_keys' ~/.bashrc 2>/dev/null && echo -e "${CR}Suspicious SSH authorized_key shenanigans found: ~/.bashrc${CN}"
 
-    s="$(grep -HEoam1 '(XMRIG_VERSION|Id: UPX )' /proc/*/exe /dev/null 2>/dev/null | sed 's|[^0-9]||g')"
-    [ -n "$s" ] && {
+    s=($(grep -HoaFm1 'XMRIG_VERSION' /proc/*/exe /dev/null 2>/dev/null | sed 's|[^0-9]||g'))
+    # Analyze every UPX packed process for XMRIG_VERSION string
+    [ "${#_HS_UPX_PIDS[@]}" -gt 0 ] &&
+    for x in "${_HS_UPX_PIDS[@]}"; do
+        s+=($(_hs_gdb_proc_match "${x}" 'XMRIG_VERSION'))
+    done
+    [ "${#s[@]}" -gt 0 ] && {
         echo -e "${CR}XMRig miner processes found:${CF}"
         # ps --no-headers -eo pid,%cpu,%mem,command => NOT PORTABLE
-        for x in $s; do
-            echo "PID: $x"$'\t'" $(stat -c '%U' /proc/$x)"$'\t'" $(strings /proc/$x/cmdline 2>/dev/null)"
+        for x in "${s[@]}"; do
+            echo "PID: $x"$'\t'" $(stat -c '%U' /proc/$x)"$'\t'" $(strings /proc/$x/cmdline 2>/dev/null |tr '[\r\n]' ' ')"
         done
         echo -en "${CN}"
     }
+    unset _HS_UPX_PIDS
 
     s="$(grep -F 'base64 -d' ~/.bashrc 2>/dev/null)"
     [ -n "$s" ] && {
@@ -1359,6 +1385,13 @@ _warn_skids() {
     [ -n "$s" ] && {
         echo -e "${CR}Suspicious cronjobs:${CF}"
         echo "$s"$'\033[0m'
+    }
+
+    s="$(grep '^tmpfs /proc/' /proc/mounts 2>/dev/null | sed 's|tmpfs /proc/\([0-9]*\) .*|\1|g')"
+    [ -n "$s" ] && {
+        echo -e "${CR}Hidden processes (/proc mounted on tmpfs) found:${CF}"
+        echo "$s"$'\033[0m'
+        echo -e "To reveal them, type:\n  ${CDC}grep '^tmpfs /proc/' /proc/mounts|sed 's|tmpfs \(/proc/[0-9]*\) .*|\1|g'|xargs umount${CN}"
     }
 }
 
@@ -1519,8 +1552,8 @@ lootlight() {
     [ ! -d /sf ] && {
         _warn_edr
         _warn_rk
-        _warn_skids
         _warn_upx_exe
+        _warn_skids
     }
     declare -f _extended_history >/dev/null && [ -n "$PROMPT_COMMAND" ] && {
         unset PROMPT_COMMAND
