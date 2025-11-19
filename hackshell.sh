@@ -1306,9 +1306,10 @@ _warn_upx_exe() {
     unset _HS_UPX_PIDS
     for x in /proc/[123456789]*/exe; do
         [ ! -e "$x" ] && continue
+        pid="${x:6}"
+        pid="${pid%%/*}"
+        [ "$pid" -le 300 ] && continue
         dd bs=1k count=1 if="$x" 2>/dev/null | grep -Fqam1 'UPX!' && {
-            pid="${x:6}"
-            pid="${pid%%/*}"
             _HS_UPX_PIDS+=("${pid}")
             str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null | tr '[\r\n]' ' ')"$'\n'
         }
