@@ -1311,11 +1311,11 @@ _warn_upx_exe() {
         [ "$pid" -le 300 ] && continue
         dd bs=1k count=1 if="$x" 2>/dev/null | grep -Fqam1 'UPX!' && {
             _HS_UPX_PIDS+=("${pid}")
-            str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null | tr '[\r\n]' ' ')"$'\n'
+            str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null  | tr '[\r\n]' ' ' | cut -c -${COLUMNS:-80})"$'\n'
         }
     done    
     [ -z "$str" ] && return
-    echo -e "${CR}UPX packed process found:${CF}"
+    echo -e "${CR}UPX packed processes found:${CF}"
     echo -en "${str}"$'\033[0m'
 }
 
@@ -1356,7 +1356,6 @@ _warn_skids() {
 
     s=($(grep -HoaFm1 'XMRIG_VERSION' /proc/*/exe /dev/null 2>/dev/null | sed 's|[^0-9]||g'))
     # Analyze every UPX packed process for XMRIG_VERSION string
-    [ "${#_HS_UPX_PIDS[@]}" -gt 0 ] &&
     for x in "${_HS_UPX_PIDS[@]}"; do
         s+=($(_hs_gdb_proc_match "${x}" 'XMRIG_VERSION'))
     done
@@ -1364,7 +1363,7 @@ _warn_skids() {
         echo -e "${CR}XMRig miner processes found:${CF}"
         # ps --no-headers -eo pid,%cpu,%mem,command => NOT PORTABLE
         for x in "${s[@]}"; do
-            echo "PID: $x"$'\t'" $(stat -c '%U' /proc/$x)"$'\t'" $(strings /proc/$x/cmdline 2>/dev/null |tr '[\r\n]' ' ')"
+            echo "PID: $x"$'\t'" $(stat -c '%U' /proc/$x)"$'\t'" $(strings /proc/$x/cmdline 2>/dev/null |tr '[\r\n]' ' ' | cut -c -${COLUMNS:-80})"
         done
         echo -en "${CN}"
     }
@@ -2300,7 +2299,7 @@ hs_info() {
         [[ "${t##*/}" == "ptmx" ]] && continue
         [[ "$((now - ${x%% *}))" -gt 3600 ]] && continue
         echo -e "${CR}Active user: ${CDY}${u} ${CY}${CF}${t}"
-        ps a -o tty,pid,cmd 2>/dev/null | grep "${_HS_GREP_COLOR_NEVER[@]}" ^"${t#/dev/}" 2>/dev/null
+        ps a -o tty,pid,cmd 2>/dev/null | grep "${_HS_GREP_COLOR_NEVER[@]}" ^"${t#/dev/}" 2>/dev/null | cut -c -${COLUMNS:-80}
         echo -en "${CN}"
     done
 }
