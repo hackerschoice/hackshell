@@ -1335,12 +1335,12 @@ _hs_gdb_proc_match() {
 
 _detect_ebury() {
     local st bin=$(readlink -f $(ldd -v $(command -v sshd 2>/dev/null) 2>/dev/null | grep -F 'keyutils' | awk '{print $3}' | head -n1) 2>/dev/null)
-    [ -z "$bin" ] && return
+    [ -z "$bin" ] && return 255
 
     st=$(stat "${bin}")
 
     rv=$(ls -l "${bin}")
-    [[ "$st" == *"-rwsr"* ]] && return 0 ## YES
+    { [[ "$st" == *"-rwsr"* ]] || [[ "$st" == *"-rwSr"* ]] || [[ "$st" == *"-r-sr"* ]] || [[ "$st" == *"-r-Sr"* ]]; } && return 0 ## YES
 
     v=$(stat --format='%s' "${bin}")
     [ -n "$v" ] && [ "$v" -gt 32000 ] && return 0 ## YES
