@@ -1359,7 +1359,7 @@ _warn_ebury() {
     _detect_ebury || return
 
     echo -e "${CR}Ebury backdoor detected.${CF}"
-    echo -e "$rv"$'\033[0m'
+    echo "$rv"$'\033[0m'
 }
 
 # Warn of script kiddies
