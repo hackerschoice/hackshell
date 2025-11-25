@@ -1385,14 +1385,21 @@ _detect_ebury() {
 }
 
 _ebdump() {
-    local s
+    local s con res
 
-    echo -e "${CN}${CDY}Dumping Ebury log via @$(_ebsock):${CF}"
-    while :; do
+    res=$(while :; do
         s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" | strings)"
-        [ -z "$s" ] && break
-        echo "$s"
-    done | column -t
+        [ -z "$s" ] && {
+            [ -n "$con" ] && echo -e "#$(( ($(date +%s) - con)/60 )) minutes ago"
+            break
+        }
+        echo ":$s"
+        [ -z "$con" ] && con=$(echo "$s" | grep -E  $'\te\t1' | cut -f8 -d $'\t')
+    done)
+    [ -z "$res" ] && return
+    echo -e "${CN}${CDY}Dumping Ebury log via @$(_ebsock) (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
+
+    echo "$res" | grep ^: | column -t
     echo -en "${CN}"
 }
 
