@@ -1424,7 +1424,7 @@ _ebdump() {
         echo ":$s"
         [ -z "$con" ] && con=$(echo "$s" | grep -E  $'\te\t1' | cut -f8 -d $'\t')
     done)
-    [ -z "$res" ] && return
+    [ -z "$res" ] && { echo -en "${CN}"; return; } #failed. Maybe already ptraced?
     [ -z "$DEL" ] && command -v gdb >/dev/null && rvia="via gdb [set DEL=1 to delete logs]" || rvia="via @$(_ebsock)"
     echo -e "${CN}${CDY}Dumping Ebury log ${rvia} (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
 
@@ -1445,7 +1445,7 @@ _warn_ebury() {
     pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | perl -e 'read STDIN,$b,8;print unpack("x4V",$b)')
     [ -z "$pid" ] && return
     echo -e "${CR}Ebury Master hiding as process:${CF}"
-    ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}";
+    ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
     _ebdump "$pid"
 }
 
