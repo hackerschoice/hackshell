@@ -1327,12 +1327,14 @@ _warn_upx_exe() {
 
 memdump() {
     local pid="${1:?}"
-    local x exe=$(readlink -f /proc/${pid}/exe 2>/dev/null)
+    local out x exe=$(readlink -f /proc/${pid}/exe 2>/dev/null)
     exe="${exe##*/}"
 
-    cat "/proc/${pid}/maps" | cut -f1 -d" " | while read -r x; do
+    cat "/proc/${pid}/maps" >${pid}_${exe}_maps.txt
+    grep -E "${2:-.}" "/proc/${pid}/maps" | cut -f1 -d" " | while read -r x; do
         echo -e "${pid}\t ${exe}\t 0x${x%%-*}-0x${x##*-}"
-        gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory ${pid}_${exe}_${x%%-*}-${x##*-} 0x${x%%-*} 0x${x##*-}" &>/dev/null
+        out="${pid}_${exe}_${x%%-*}-${x##*-}"
+        gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory ${out} 0x${x%%-*} 0x${x##*-}" &>/dev/null
     done
 }
 
@@ -1350,13 +1352,21 @@ _hs_gdb_proc_match() {
     done
 }
 
+# Send stdin to abstract unix domain socket and print response to stdout
+_audsock() {
+    perl -e 'use IO::Socket::UNIX;$n=shift||"";$n=~s/^@//;$p="\0".$n;$s=IO::Socket::UNIX->new(Peer=>$p,Type=>SOCK_STREAM)||die$!;binmode(STDIN);binmode(STDOUT);binmode($s);$fd=fileno($s);$w="";vec($w,$fd,1)=1;select(undef,$w,undef,undef);while(1){my$buf;my$r=sysread(STDIN,$buf,4096);die"read STDIN:$!"unless defined$r;last if$r==0;my$o=0;while($o<$r){my$w=syswrite($s,$buf,$r-$o,$o);die"write:$!"unless defined$w;$o+=$w}}shutdown($s,1);while(1){my$buf;my$r=sysread($s,$buf,4096);die"read sock:$!"unless defined$r;last if$r==0;print$buf}close$s;exit;' @"${1:?}"
+}
+# Determine the Ebury abstract unix domain socket
+_ebsock() { [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 'event-[a-zA-Z0-9]{10,}' /proc/net/unix); echo "${_HS_EBSOCK}"; }
+
 _detect_ebury() {
-    local st bin=$(readlink -f $(ldd -v $(command -v sshd 2>/dev/null) 2>/dev/null | grep -F 'keyutils' | awk '{print $3}' | head -n1) 2>/dev/null)
+    local st bin=$(readlink -f $(ldd -v $(PATH="${PATH}:/usr/sbin" command -v sshd 2>/dev/null) 2>/dev/null | grep -F 'keyutils' | awk '{print $3}' | head -n1) 2>/dev/null)
 
     [ -n "$bin" ] && [ -f "$bin" ] && {
         st=$(stat "${bin}")
 
         rv=$(ls -l "${bin}")
+        rvdate=$(stat "${bin}" | grep Change | cut -f2-3 -d' ')
         { [[ "$st" == *"-rwsr"* ]] || [[ "$st" == *"-rwSr"* ]] || [[ "$st" == *"-r-sr"* ]] || [[ "$st" == *"-r-Sr"* ]]; } && return 0 ## YES
 
         v=$(stat --format='%s' "${bin}")
@@ -1374,15 +1384,33 @@ _detect_ebury() {
     return 255 ## NOT found.
 }
 
+_ebdump() {
+    local s
+
+    echo -e "${CN}${CDY}Dumping Ebury log via @$(_ebsock):${CF}"
+    while :; do
+        s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" | strings)"
+        [ -z "$s" ] && break
+        echo "$s"
+    done | column -t
+    echo -en "${CN}"
+}
+
 # https://www.travismathison.com/posts/Decoding-Ebury-Malware-SSH-Commands/
 # https://web-assets.esetstatic.com/wls/en/papers/white-papers/ebury-is-alive-but-unseen.pdf
 # Pesty criminals mass owning. Fuck'm
 _warn_ebury() {
-    local rv
+    local rv pid rvdate
     _detect_ebury || return
 
-    echo -e "${CR}Ebury backdoor detected.${CF}"
+    echo -e "${CR}Ebury backdoor detected [Installation date: ${rvdate:-unknown}].${CF}"
     echo "$rv"$'\033[0m'
+
+    pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | perl -e 'read STDIN,$b,8;print unpack("x4V",$b)')
+    [ -z "$pid" ] && return
+    echo -e "${CR}Ebury Master hiding as process:${CF}"
+    ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}";
+    _ebdump
 }
 
 # Warn of script kiddies
