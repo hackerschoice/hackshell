@@ -1325,6 +1325,8 @@ _warn_upx_exe() {
     echo -en "${str}"$'\033[0m'
 }
 
+
+
 memdump() {
     local pid="${1:?}"
     local out x exe=$(readlink -f /proc/${pid}/exe 2>/dev/null)
@@ -1353,6 +1355,7 @@ _hs_gdb_proc_match() {
 }
 
 # Send stdin to abstract unix domain socket and print response to stdout
+# Alternative: socat - ABSTRACT-CONNECT:$(_ebsock)
 _audsock() {
     perl -e 'use IO::Socket::UNIX;$n=shift||"";$n=~s/^@//;$p="\0".$n;$s=IO::Socket::UNIX->new(Peer=>$p,Type=>SOCK_STREAM)||die$!;binmode(STDIN);binmode(STDOUT);binmode($s);$fd=fileno($s);$w="";vec($w,$fd,1)=1;select(undef,$w,undef,undef);while(1){my$buf;my$r=sysread(STDIN,$buf,4096);die"read STDIN:$!"unless defined$r;last if$r==0;my$o=0;while($o<$r){my$w=syswrite($s,$buf,$r-$o,$o);die"write:$!"unless defined$w;$o+=$w}}shutdown($s,1);while(1){my$buf;my$r=sysread($s,$buf,4096);die"read sock:$!"unless defined$r;last if$r==0;print$buf}close$s;exit;' @"${1:?}"
 }
@@ -1384,11 +1387,36 @@ _detect_ebury() {
     return 255 ## NOT found.
 }
 
-_ebdump() {
-    local s con res
+# If GDB is available, dump Ebury log from process memory
+_ebcredgdbdump() {
+    local pid="${1:?}"
+    local x="$(grep ^7 /proc/$pid/maps | grep -Fm1 ' 00:00 0' |cut -f1 -d' ')"
+    gdb -q --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory /dev/stderr 0x${x%%-*} 0x${x##*-}" 2>&1 >/dev/null | strings | grep ^1
+}
 
-    res=$(while :; do
-        s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" | strings)"
+# Otherwise dump it via the Ebury abstract unix domain socket
+# Note: This will CLEAN the log after reading it.
+_ebcredsoxdump() {
+    while :; do
+        local s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" | strings)"
+        [ -z "$s" ] && break
+        echo ":$s"
+    done
+}
+
+_ebgdborsox() {
+    [ -z "$DEL" ] && command -v gdb >/dev/null && {
+        _ebcredgdbdump "$pid"
+        return
+    }
+    _ebcredsoxdump
+}
+
+_ebdump() {
+    local s con rvia res pid="${1:?}"
+
+    res=$(_ebgdborsox "$pid" | while :; do
+        read -r s
         [ -z "$s" ] && {
             [ -n "$con" ] && echo -e "#$(( ($(date +%s) - con)/60 )) minutes ago"
             break
@@ -1397,7 +1425,8 @@ _ebdump() {
         [ -z "$con" ] && con=$(echo "$s" | grep -E  $'\te\t1' | cut -f8 -d $'\t')
     done)
     [ -z "$res" ] && return
-    echo -e "${CN}${CDY}Dumping Ebury log via @$(_ebsock) (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
+    [ -z "$DEL" ] && command -v gdb >/dev/null && rvia="via gdb [set DEL=1 to delete logs]" || rvia="via @$(_ebsock)"
+    echo -e "${CN}${CDY}Dumping Ebury log ${rvia} (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
 
     echo "$res" | grep ^: | column -t
     echo -en "${CN}"
@@ -1417,7 +1446,7 @@ _warn_ebury() {
     [ -z "$pid" ] && return
     echo -e "${CR}Ebury Master hiding as process:${CF}"
     ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}";
-    _ebdump
+    _ebdump "$pid"
 }
 
 # Warn of script kiddies
