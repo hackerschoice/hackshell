@@ -1434,7 +1434,7 @@ _ebdump() {
     [ -z "$res" ] && { echo -en "${CN}"; [ "$usegdb" = 1 ] && echo -e "${CDY}GDB failed. strace running? Dump via socket with ${CF}DEL=1 _warn_ebury${CN}"; return; } #failed. Maybe already ptraced?
     echo -e "${CN}${CDY}Dumping Ebury log ${rvia} (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
 
-    echo "$res" | grep ^: | column -t
+    echo "$res" | grep ^: | column -t -s$'\t'
     echo -en "${CN}"
 }
 
@@ -1454,7 +1454,7 @@ _warn_ebury() {
     ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
 
     rv=$(printf '\4\4\0\0\0\0\0\0' | _audsock "$(_ebsock)" | strings)
-    [ -z "$rv" ] && echo -en "${CN}${CDY}Ebury exfil server (libcurl):${CF} ${rv}${CN}"
+    [ -n "$rv" ] && echo -en "${CN}${CDY}Ebury exfil server (libcurl):${CF} ${rv}${CN}"
 
     _ebdump "$pid"
 }
