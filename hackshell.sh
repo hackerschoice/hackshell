@@ -258,7 +258,7 @@ surl() {
 lurl() {
     local url="${1:?}"
     { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
-    perl -e 'use LWP::Simple qw(get);
+    LANG=C perl -e 'use LWP::Simple qw(get);
 my $url = '"'${1:?}'"';
 print(get $url);'
 }
@@ -391,7 +391,7 @@ find_subdomains() {
 # echo -n "XOREncodeThisSecret" | xor 0xfa
 xor() {
     _hs_dep perl || return
-    perl -e 'while(<>){foreach $c (split //){print $c^chr('"${1:-0xfa}"');}}'
+    LANG=C perl -e 'while(<>){foreach $c (split //){print $c^chr('"${1:-0xfa}"');}}'
 }
 
 xorpipe() { xor "${1:-0xfa}" | sed 's/\r/\n/g'; }
@@ -1357,7 +1357,7 @@ _hs_gdb_proc_match() {
 # Send stdin to abstract unix domain socket and print response to stdout
 # Alternative: socat - ABSTRACT-CONNECT:$(_ebsock)
 _audsock() {
-    perl -e 'use IO::Socket::UNIX;$n=shift||"";$n=~s/^@//;$p="\0".$n;$s=IO::Socket::UNIX->new(Peer=>$p,Type=>SOCK_STREAM)||die$!;binmode(STDIN);binmode(STDOUT);binmode($s);$fd=fileno($s);$w="";vec($w,$fd,1)=1;select(undef,$w,undef,undef);while(1){my$buf;my$r=sysread(STDIN,$buf,4096);die"read STDIN:$!"unless defined$r;last if$r==0;my$o=0;while($o<$r){my$w=syswrite($s,$buf,$r-$o,$o);die"write:$!"unless defined$w;$o+=$w}}shutdown($s,1);while(1){my$buf;my$r=sysread($s,$buf,4096);die"read sock:$!"unless defined$r;last if$r==0;print$buf}close$s;exit;' @"${1:?}"
+    LANG=C perl -e 'use IO::Socket::UNIX;$n=shift||"";$n=~s/^@//;$p="\0".$n;$s=IO::Socket::UNIX->new(Peer=>$p,Type=>SOCK_STREAM)||die$!;binmode(STDIN);binmode(STDOUT);binmode($s);$fd=fileno($s);$w="";vec($w,$fd,1)=1;select(undef,$w,undef,undef);while(1){my$buf;my$r=sysread(STDIN,$buf,4096);die"read STDIN:$!"unless defined$r;last if$r==0;my$o=0;while($o<$r){my$w=syswrite($s,$buf,$r-$o,$o);die"write:$!"unless defined$w;$o+=$w}}shutdown($s,1);while(1){my$buf;my$r=sysread($s,$buf,4096);die"read sock:$!"unless defined$r;last if$r==0;print$buf}close$s;exit;' @"${1:?}"
 }
 # Determine the Ebury abstract unix domain socket
 _ebsock() { [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 'event-[a-zA-Z0-9]{10,}' /proc/net/unix); echo "${_HS_EBSOCK}"; }
@@ -1400,7 +1400,7 @@ _ebcredsoxdump() {
     while :; do
         local s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" | strings)"
         [ -z "$s" ] && break
-        echo ":$s"
+        echo "$s"
     done
 }
 
@@ -1417,7 +1417,11 @@ _ebgdborsox() {
 _ebdump() {
     local usegdb s con rvia res pid="${1:?}"
 
-    [ "$UID" -eq 0 ] && [ -z "$DEL" ] && command -v gdb >/dev/null && usegdb=1
+    rvia="via @$(_ebsock)"
+    [ "$UID" -eq 0 ] && [ -z "$DEL" ] && command -v gdb >/dev/null && {
+        usegdb=1
+        rvia="via gdb [set DEL=1 to delete logs]"
+    }
     res=$(_ebgdborsox "$pid" "$usegdb" | while :; do
         read -r s
         [ -z "$s" ] && {
@@ -1427,8 +1431,7 @@ _ebdump() {
         echo ":$s"
         [ -z "$con" ] && con=$(echo "$s" | grep -E  $'\te\t1' | cut -f8 -d $'\t')
     done)
-    [ -z "$res" ] && { echo -en "${CN}"; return; } #failed. Maybe already ptraced?
-    [ "$UID" -eq 0 ][ -z "$DEL" ] && command -v gdb >/dev/null && rvia="via gdb [set DEL=1 to delete logs]" || rvia="via @$(_ebsock)"
+    [ -z "$res" ] && { echo -en "${CN}"; [ "$usegdb" = 1 ] && echo -e "${CDY}GDB failed. strace running? Dump via socket with ${CF}DEL=1 _warn_ebury${CN}"; return; } #failed. Maybe already ptraced?
     echo -e "${CN}${CDY}Dumping Ebury log ${rvia} (last: $(echo "$res" | grep ^# | sed 's/^.//')):${CF}"
 
     echo "$res" | grep ^: | column -t
@@ -1445,10 +1448,14 @@ _warn_ebury() {
     echo -e "${CR}Ebury backdoor detected [Installation date: ${rvdate:-unknown}].${CF}"
     echo "$rv"$'\033[0m'
 
-    pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | perl -e 'read STDIN,$b,8;print unpack("x4V",$b)')
+    pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | LANG=C perl -e 'read STDIN,$b,8;print unpack("x4V",$b)')
     [ -z "$pid" ] && return
     echo -e "${CR}Ebury Master hiding as process:${CF}"
     ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
+
+    rv=$(printf '\4\4\0\0\0\0\0\0' | _audsock "$(_ebsock)" | strings)
+    [ -z "$rv" ] && echo -en "${CN}${CDY}Ebury exfil server (libcurl):${CF} ${rv}${CN}"
+
     _ebdump "$pid"
 }
 
@@ -2047,8 +2054,8 @@ _memexec() {
 
     _hs_dep perl || return
     shift
-    [ $PPID -eq 1 ] && exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
-    perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
+    [ $PPID -eq 1 ] && LANG=C exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
+    LANG=C perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
     return $?
 }
 
