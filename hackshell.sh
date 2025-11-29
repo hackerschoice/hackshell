@@ -1372,8 +1372,9 @@ _detect_ebury() {
         rvdate=$(stat "${bin}" | grep Change | cut -f2-3 -d' ')
         { [[ "$st" == *"-rwsr"* ]] || [[ "$st" == *"-rwSr"* ]] || [[ "$st" == *"-r-sr"* ]] || [[ "$st" == *"-r-Sr"* ]]; } && return 0 ## YES
 
+        [ "$(uname -m)" = "aarch64" ] && minsize=68000
         v=$(stat --format='%s' "${bin}")
-        [ -n "$v" ] && [ "$v" -gt 32000 ] && return 0 ## YES
+        [ -n "$v" ] && [ "$v" -gt ${minsize:-32000} ] && return 0 ## YES
 
         command -v nm >/dev/null && {
             # Ebury binaries fail on nm -D
@@ -1447,6 +1448,8 @@ _warn_ebury() {
 
     echo -e "${CR}Ebury backdoor detected [Installation date: ${rvdate:-unknown}].${CF}"
     echo "$rv"$'\033[0m'
+
+    [ -z "$(_ebsock)"] && { echo -e "${CR}No Ebury socket found. False positive?.${CF}"; return; } # But no socket?
 
     pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | LANG=C perl -e 'read STDIN,$b,8;print unpack("x4V",$b)')
     [ -z "$pid" ] && return
