@@ -1359,8 +1359,24 @@ _hs_gdb_proc_match() {
 _audsock() {
     LANG=C perl -e 'use IO::Socket::UNIX;$n=shift||"";$n=~s/^@//;$p="\0".$n;$s=IO::Socket::UNIX->new(Peer=>$p,Type=>SOCK_STREAM)||die$!;binmode(STDIN);binmode(STDOUT);binmode($s);$fd=fileno($s);$w="";vec($w,$fd,1)=1;select(undef,$w,undef,undef);while(1){my$buf;my$r=sysread(STDIN,$buf,4096);die"read STDIN:$!"unless defined$r;last if$r==0;my$o=0;while($o<$r){my$w=syswrite($s,$buf,$r-$o,$o);die"write:$!"unless defined$w;$o+=$w}}shutdown($s,1);while(1){my$buf;my$r=sysread($s,$buf,4096);die"read sock:$!"unless defined$r;last if$r==0;print$buf}close$s;exit;' @"${1:?}"
 }
+
 # Determine the Ebury abstract unix domain socket
-_ebsock() { [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 'event-[a-zA-Z0-9]{10,}' /proc/net/unix); echo "${_HS_EBSOCK}"; }
+_ebsock() {
+    [ -n "$_HS_EBSOCK" ] && {
+        echo "${_HS_EBSOCK}"
+        return
+    }
+    _HS_EBSOCK=$(grep -Eom1 '@event-[a-zA-Z0-9]{10}' /proc/net/unix); # 1.8.0-latest
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/dev/.*-[a-zA-Z0-9]{10}' /proc/net/unix); # 1.7.4c-4d
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@UDEV-[a-zA-Z0-9]{8}' /proc/net/unix); # 1.7.3c
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/run/systemd/log' /proc/net/unix);  # 1.7.3
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/run/systemd/.*-[a-zA-Z0-9]{10,}' /proc/net/unix); # 1.6.3-1.7.1c
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix); # 1.5.1e-1.6.2gp
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/proc/udevd' /proc/net/unix); # 1.5.x
+
+    _HS_EBSOCK="${_HS_EBSOCK:1}"
+    echo "${_HS_EBSOCK}"
+}
 
 _detect_ebury() {
     local st bin=$(readlink -f $(ldd -v $(PATH="${PATH}:/usr/sbin" command -v sshd 2>/dev/null) 2>/dev/null | grep -F 'keyutils' | awk '{print $3}' | head -n1) 2>/dev/null)
@@ -1382,7 +1398,10 @@ _detect_ebury() {
         }
     }
 
-    rv=$(grep -E '@event-[a-zA-Z0-9]{10}'  /proc/net/unix)
+    rv=$(_ebsock)
+    [ -z "$rv" ] && return 255 ## NOT found.
+
+    rv=$(grep -E "${rv}"  /proc/net/unix)
     [ -n "$rv" ] && { rv="Try lsof -U | grep event-"$'\n'"$rv"; return 0; } ## YES
 
     return 255 ## NOT found.
@@ -1441,6 +1460,7 @@ _ebdump() {
 
 # https://www.travismathison.com/posts/Decoding-Ebury-Malware-SSH-Commands/
 # https://web-assets.esetstatic.com/wls/en/papers/white-papers/ebury-is-alive-but-unseen.pdf
+# https://github.com/eset/malware-research/blob/master/ebury/detect_ebury.sh#L56
 # Pesty criminals mass owning. Fuck'm
 _warn_ebury() {
     local rv pid rvdate
@@ -1449,10 +1469,17 @@ _warn_ebury() {
     echo -e "${CR}Ebury backdoor detected [Installation date: ${rvdate:-unknown}].${CF}"
     echo "$rv"$'\033[0m'
 
-    [ -z "$(_ebsock)"] && { echo -e "${CR}No Ebury socket found. False positive?.${CF}"; return; } # But no socket?
+    [ -z "$(_ebsock)" ] && { echo -e "${CR}No Ebury socket found. False positive?.${CF}"; return; } # But no socket?
 
-    pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | LANG=C perl -e 'read STDIN,$b,8;print unpack("x4V",$b)')
-    [ -z "$pid" ] && return
+    [ -z "$pid" ] && command -v lsxxof >/dev/null && pid="$(lsof -U  | grep -F "$(_ebsock)" | awk '{ print $2;}')"
+    [ -z "$pid" ] && {
+        local inode
+        inode=$(grep "@$(_ebsock)\$" /proc/net/unix | grep ' 00010000 ' | awk '{ print $7 }')
+        pid=$(find /proc -maxdepth 3 -lname "socket:\[$inode\]" 2> /dev/null | cut -d/ -f 3)
+    }
+    [ -z "$pid" ] && pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | LANG=C perl -e 'read STDIN,$b,8;print unpack("x4V",$b)' 2>/dev/null)
+    [ -z "$pid" ] && { echo "Can not determine Ebury master PID"; return; }
+
     echo -e "${CR}Ebury Master hiding as process:${CF}"
     ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
 
@@ -2385,6 +2412,7 @@ hs_init_shell() {
     export REDISCLI_HISTFILE=/dev/null
     export MYSQL_HISTFILE=/dev/null
     export PSQL_HISTORY=/dev/null
+    export SQLITE_HISTORY=/dev/null
 
     export T=.$'\t''~?$?'".${UID}"
     # PTY backdoor to not sniff when using sudo/su.
