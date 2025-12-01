@@ -1363,15 +1363,17 @@ _audsock() {
 # Determine the Ebury abstract unix domain socket
 _ebsock() {
     [ "${_HS_EBSOCK}" == "NA" ] && return
-
-    [ -z "${_HS_EBSOCK}" ] && {
-        _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/.*-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|tmp/dbus-[a-zA-Z0-9]{10}|proc/udevd)' /proc/net/unix)
-        [ -z "$_HS_EBSOCK" ] && {
-            _HS_EBSOCK="NA"
-            return
-        }
-        _HS_EBSOCK="${_HS_EBSOCK:1}"
+    [ -n "${_HS_EBSOCK}" ] && {
+        echo "${_HS_EBSOCK}"
+        return
     }
+
+    _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/.*-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|tmp/dbus-[a-zA-Z0-9]{10}|proc/udevd)' /proc/net/unix)
+    [ -z "$_HS_EBSOCK" ] && {
+        _HS_EBSOCK="NA"
+        return
+    }
+    _HS_EBSOCK="${_HS_EBSOCK:1}"
     echo "${_HS_EBSOCK}"
 }
 
