@@ -1370,8 +1370,8 @@ _ebsock() {
             _HS_EBSOCK="NA"
             return
         }
+        _HS_EBSOCK="${_HS_EBSOCK:1}"
     }
-    _HS_EBSOCK="${_HS_EBSOCK:1}"
     echo "${_HS_EBSOCK}"
 }
 
