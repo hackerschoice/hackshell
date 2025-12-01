@@ -1362,18 +1362,15 @@ _audsock() {
 
 # Determine the Ebury abstract unix domain socket
 _ebsock() {
-    [ -n "$_HS_EBSOCK" ] && {
-        echo "${_HS_EBSOCK}"
-        return
-    }
-    _HS_EBSOCK=$(grep -Eom1 '@event-[a-zA-Z0-9]{10}' /proc/net/unix); # 1.8.0-latest
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/dev/.*-[a-zA-Z0-9]{10}' /proc/net/unix); # 1.7.4c-4d
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@UDEV-[a-zA-Z0-9]{8}' /proc/net/unix); # 1.7.3c
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/run/systemd/log' /proc/net/unix);  # 1.7.3
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/run/systemd/.*-[a-zA-Z0-9]{10,}' /proc/net/unix); # 1.6.3-1.7.1c
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix); # 1.5.1e-1.6.2gp
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -Eom1 '@/proc/udevd' /proc/net/unix); # 1.5.x
+    [ "${_HS_EBSOCK}" == "NA" ] && return
 
+    [ -z "${_HS_EBSOCK}" ] && {
+        _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/.*-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|tmp/dbus-[a-zA-Z0-9]{10}|proc/udevd)' /proc/net/unix)
+        [ -z "$_HS_EBSOCK" ] && {
+            _HS_EBSOCK="NA"
+            return
+        }
+    }
     _HS_EBSOCK="${_HS_EBSOCK:1}"
     echo "${_HS_EBSOCK}"
 }
