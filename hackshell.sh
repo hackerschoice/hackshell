@@ -1426,7 +1426,7 @@ _ebcredsoxdump() {
 }
 
 _ebgdborsox() {
-    local pid="${1:?}"
+    local pid="${1}"
     local usegdb="${2:-}"
     [ "$usegdb" = 1 ] && {
         _ebcredgdbdump "$pid"
@@ -1436,10 +1436,10 @@ _ebgdborsox() {
 }
 
 _ebdump() {
-    local usegdb s con rvia res pid="${1:?}"
+    local usegdb s con rvia res pid="${1}"
 
     rvia="via @$(_ebsock)"
-    [ "$UID" -eq 0 ] && [ -z "$DEL" ] && command -v gdb >/dev/null && {
+    [ "$UID" -eq 0 ] && [ -n "$pid" ] && [ -z "$DEL" ] && command -v gdb >/dev/null && {
         usegdb=1
         rvia="via gdb [set DEL=1 to delete logs]"
     }
@@ -1472,17 +1472,20 @@ _warn_ebury() {
 
     [ -z "$(_ebsock)" ] && { echo -e "${CR}No Ebury socket found. False positive?.${CF}"; return; } # But no socket?
 
-    [ -z "$pid" ] && command -v lsxxof >/dev/null && pid="$(lsof -U  | grep -F "$(_ebsock)" | awk '{ print $2;}')"
+    [ -z "$pid" ] && command -v lsof >/dev/null && pid="$(lsof -U  2>/dev/null | grep -F "$(_ebsock)" | awk '{ print $2;}')"
     [ -z "$pid" ] && {
         local inode
         inode=$(grep "@$(_ebsock)\$" /proc/net/unix | grep ' 00010000 ' | awk '{ print $7 }')
         pid=$(find /proc -maxdepth 3 -lname "socket:\[$inode\]" 2> /dev/null | cut -d/ -f 3)
     }
     [ -z "$pid" ] && pid=$(printf '\4\5\0\0\0\0\0\0' | _audsock "$(_ebsock)" | LANG=C perl -e 'read STDIN,$b,8;print unpack("x4V",$b)' 2>/dev/null)
-    [ -z "$pid" ] && { echo "Can not determine Ebury master PID"; return; }
-
-    echo -e "${CR}Ebury Master hiding as process:${CF}"
-    ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
+    # \4\5 not working and process running under different user.
+    if [ -z "$pid" ]; then
+        echo "Can not determine Ebury master PID"
+    else
+        echo -e "${CR}Ebury Master hiding as process:${CF}"
+        ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
+    fi
 
     rv=$(printf '\4\4\0\0\0\0\0\0' | _audsock "$(_ebsock)" | strings)
     [ -n "$rv" ] && echo -en "${CN}${CDY}Ebury exfil server (libcurl):${CF} ${rv}${CN}"
