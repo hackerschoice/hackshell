@@ -1368,7 +1368,9 @@ _ebsock() {
         return
     }
 
-    _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/.*-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|tmp/dbus-[a-zA-Z0-9]{10}|proc/udevd)' /proc/net/unix)
+    _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/(event|stats)-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|/proc/udevd)' /proc/net/unix)
+    # /tmp/dbus-[a-zA-Z0-9]{10} can occur naturally so check that it's just 1.
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -E '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix | sed 's|.*@||g'  | sort | uniq -c | grep " 1 " | awk '{print $2}' | head -n1)
     [ -z "$_HS_EBSOCK" ] && {
         _HS_EBSOCK="NA"
         return
