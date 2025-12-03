@@ -435,7 +435,8 @@ shred() {
 
 command -v srm >/dev/null || srm() { shred "$@"; }
 
-command -v strings >/dev/null || strings() { perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }
+command -v strings >/dev/null || { command -v perl >/dev/null && strings() { perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }; }
+command -v strings >/dev/null || { command -v grep >/dev/null && strings() { grep -a -o -E '[[:print:]]{8,}' "$@"; }; }
 
 bounceinit() {
     [[ -n "$_is_bounceinit" ]] && return
@@ -1143,6 +1144,11 @@ _loot_yandex() {
 gsnc() {
     [ -z "$GSNC" ] && return 255
     _GS_ALLOWNOARG=1 "$GSNC" "$@"
+}
+# Show the GSNC config.
+gsconfig() {
+    GS_CONFIG_CHECK=1 GS_CONFIG_READ="$GSNC" gsnc || return
+    echo "GS_CONFIG_BIN='$GSNC'"
 }
 command -v gs-netcat >/dev/null || gs-netcat() { gsnc "$@"; }
 
