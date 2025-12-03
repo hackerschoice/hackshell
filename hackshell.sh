@@ -1549,7 +1549,7 @@ _warn_skids() {
         echo "$s"$'\033[0m'
     }
 
-    s="$(grep '^tmpfs /proc/' /proc/mounts 2>/dev/null | sed 's|tmpfs /proc/\([0-9]*\) .*|\1|g')"
+    s="$(grep '^tmpfs /proc/[0-9]' /proc/mounts 2>/dev/null | sed 's|tmpfs /proc/\([0-9]*\) .*|\1|g')"
     [ -n "$s" ] && {
         echo -e "${CR}Hidden processes (/proc mounted on tmpfs) found:${CF}"
         echo "$s"$'\033[0m'
