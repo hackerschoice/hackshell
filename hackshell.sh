@@ -1361,7 +1361,7 @@ gs-exfil() {
     _hs_dep gs-netcat
     _hs_dep tar
     [ -z "$SECRET" ] && {
-        echo >&2 "Usage: Execute 'gs-exfil-server' on any server first."
+        echo -e >&2 "Usage: Execute ${CDC}gs-exfil-server${CN} on any server first."
         return 255
     }
 
@@ -1379,7 +1379,7 @@ gs-sftp-server() {
     [ ! -x "$sftp_fn" ] && sftp_fn="/usr/lib/openssh/sftp-server"
     [ ! -x "$sftp_fn" ] && sftp_fn="/usr/libexec/sftp-server"
     [ ! -x "$sftp_fn" ] && {
-        echo >&2 "sftp-server not found at '$sftp_fn'."
+        HS_ERR "sftp-server not found."
         return 255
     }
 
@@ -1391,11 +1391,11 @@ gs-sftp-server() {
 gs-sftp() {
     _hs_dep sftp
     [ -z "$GSNC" ] && GSNC=$(command -v gs-netcat 2>/dev/null) && [ -z "$GSNC"] && {
-        echo >&2 "gs-netcat not found."
+        HS_ERR "gs-netcat not found."
         return 255
     }
     [ -z "$SECRET" ] && {
-        echo >&2 "Usage: Execute 'gs-sftp-server' on any server first."
+        echo -e >&2 "Usage: Execute ${CDC}gs-sftp-server${CN} on any server first."
         return 255
     }
 
