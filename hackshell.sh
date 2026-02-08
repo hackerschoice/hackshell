@@ -196,7 +196,9 @@ or try all IPv4:
 }
 
 ssh-known-hosts2hashcat() {
+    command -v xxd >/dev/null || { command -v hexdump >/dev/null && xxd() { hexdump -ve '1/1 "%.2x"'; }; }
     cat "${1:-/dev/stdin}" | _ssh-known-hosts2hashcat
+    declare -F xxd >/dev/null && unset -f xxd
 }
 
 xssh() {
@@ -1451,7 +1453,7 @@ _detect_ebury() {
         rvdate=$(stat "${bin}" | grep Change | cut -f2-3 -d' ')
         { [[ "$st" == *"-rwsr"* ]] || [[ "$st" == *"-rwSr"* ]] || [[ "$st" == *"-r-sr"* ]] || [[ "$st" == *"-r-Sr"* ]]; } && return 0 ## YES
 
-        [ "$(uname -m)" = "aarch64" ] && minsize=68000
+        [ "$(uname -m)" != "x86_64" ] && minsize=68000
         v=$(stat --format='%s' "${bin}")
         [ -n "$v" ] && [ "$v" -gt ${minsize:-32000} ] && return 0 ## YES
 
