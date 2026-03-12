@@ -2037,6 +2037,7 @@ lootmore() {
     _lootmore_pct
     _lootmore_lxc
     _lootmore_vz
+    _lootmore_video
 
     str="$(grep -sE '^[[:digit:]]' "${ROOTFS}/etc/hosts" |grep -vF -e localhost -e 127.0.0.1)"
     [ -n "$str" ] && {
