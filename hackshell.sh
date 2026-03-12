@@ -1520,6 +1520,7 @@ _ebsock() {
 
     _HS_EBSOCK=$(grep -Eom1 '@(event-[a-zA-Z0-9]{10}|/dev/(event|stats)-[a-zA-Z0-9]{10}|UDEV-[a-zA-Z0-9]{8}|/run/systemd/log|/proc/udevd)' /proc/net/unix 2>/dev/null)
     # /tmp/dbus-[a-zA-Z0-9]{10} can occur naturally so check that it's just 1.
+    # 2026: Ohh, i have seen systems where it's only 1 and still not Ebury (very rare; or is it a very modern Ebury infecting dbus-daemon?
     [ -z "$_HS_EBSOCK" ] && _HS_EBSOCK=$(grep -E '@/tmp/dbus-[a-zA-Z0-9]{10}' /proc/net/unix 2>/dev/null | sed 's|.*@||g'  | sort | uniq -c | grep " 1 " | awk '{print $2}' | head -n1)
     [ -z "$_HS_EBSOCK" ] && {
         _HS_EBSOCK="NA"
@@ -1569,7 +1570,7 @@ _ebcredgdbdump() {
 # Note: This will CLEAN the log after reading it.
 _ebcredsoxdump() {
     while :; do
-        local s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" | strings)"
+        local s="$(printf "\2\0\0\0\0\0\0\0\0\0\0\0\0" | _audsock "$(_ebsock)" 2>/dev/null | strings)"
         [ -z "$s" ] && break
         echo "$s"
     done
@@ -1637,7 +1638,7 @@ _warn_ebury() {
         ps -ouser -opid -oppid -ocmd -ocommand -p "${pid}"
     fi
 
-    rv=$(printf '\4\4\0\0\0\0\0\0' | _audsock "$(_ebsock)" | strings)
+    rv=$(printf '\4\4\0\0\0\0\0\0' | _audsock "$(_ebsock)" 2>/dev/null| strings)
     [ -n "$rv" ] && echo -en "${CN}${CDY}Ebury exfil server (libcurl):${CF} ${rv}${CN}"
 
     _ebdump "$pid"
@@ -1681,15 +1682,15 @@ _warn_skids() {
 
     _warn_ebury
 
-    s="$(grep -F 'base64 -d' ~/.bashrc 2>/dev/null)"
+    s="$(grep -aF 'base64 -d' ~/.bashrc 2>/dev/null)"
     [ -n "$s" ] && {
         echo -e "${CR}Suspicious base64 -d found in ~/.bashrc${CF}"
         echo "$s"$'\033[0m'
     }
 
-    s="$(grep -r bash /etc/systemd/system/multi-user.target.wants/* 2>/dev/null)"
+    s="$(grep -rF 'bash ' /etc/systemd/system/multi-user.target.wants/* 2>/dev/null)"
     [ -n "$s" ] && {
-        echo -e "${CR}Suspicious systemd services:${CF}"
+        echo -e "${CR}Suspicious systemd services (calls bash):${CF}"
         echo "$s"$'\033[0m'
     }
 
@@ -1941,6 +1942,21 @@ _lootmore_vz() {
     echo -en "${CN}"
 }
 
+_lootmore_video() {
+    command -v udevadm >/dev/null || return
+
+    local dev str out
+    for dev in /dev/video*; do
+        [ ! -e "$dev" ] && continue
+        out=$(udevadm info --query=all -n "$dev" 2>/dev/null | grep -E 'ID_MODEL=|ID_VENDOR=|DEVPATH=')
+        [ -n "$out" ] && str+=$'\n'"$out"
+    done
+    [ -z "$str" ] && return
+    echo -en "${CB}Video Devices [${CDC}ffmpeg -f v4l2 -video_size 1280x720 -framerate 30 -i /dev/video0${CB}]${CDY}${CF}"
+    echo "$str"
+    echo -e "${CN}"
+}
+
 _loot_auth_log() {
     [ ! -f "${ROOTFS}/var/log/auth.log" ] && return
     str="$({ grep -ohE 'sshd.* Accepted .*' "${ROOTFS}/var/log/auth.log.1" "${ROOTFS}/var/log/auth.log"  | awk '{ print $7"\t"$5"\t"$3;}' | anew | tail -n 30;} 2>/dev/null)"
@@ -1951,7 +1967,7 @@ _loot_auth_log() {
 }
 
 lootmore() {
-    local hn fn str arr
+    local hn fn str arr mc_hst
 
     _hs_init_rootfs
     _hs_gen_home
@@ -1977,7 +1993,9 @@ lootmore() {
         echo -e "${CB}Interesting commands ${CDY}${hn}/.[bash|zsh]_history${CF}"
         echo "$str"
         echo -en "${CN}"
+        [ -f "${hn}/.local/share/mc/history" ] && mc_hst+="${hn}/.local/share/mc/history"$'\n'
     done
+    [ -n "$mc_hst" ] && echo -en "${CB}MC History files found:\n${CDY}${CF}${mc_hst}${CN}"
 
     unset str
     command -v lastlog >/dev/null && str="$(lastlog -R "${ROOTFS}/" 2>/dev/null | grep -vF 'Never logged')"
