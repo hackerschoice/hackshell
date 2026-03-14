@@ -634,11 +634,11 @@ unghostdev() {
 }
 
 ghostip() {
-    # if [ -s "ghostip.sh" ]; then
-    #     source "ghostip.sh"
-    # else
+    if [ -n "$XHOME" ] && [ -s "${XHOME}/ghostip.sh" ]; then
+        source "${XHOME}/ghostip.sh"
+    else
         source <(dl https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
-    # fi
+    fi
     [ -n "$_GHOST_IS_UP" ] && HS_WARN "GhostIP will ${CR}AUTO DESTRUCT${CDM} on exit. Type ${CDC}xghost${CDM} for it to remain."
 }
 
