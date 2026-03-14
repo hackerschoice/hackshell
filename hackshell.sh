@@ -30,6 +30,7 @@
 
 _HSURL="https://github.com/hackerschoice/hackshell/raw/main/hackshell.sh"
 _HSURLORIGIN=
+_HS_INTERNET_ALLOWED=
 
 _hs_init_color() {
     [ -n "$CY" ] && return
@@ -70,9 +71,26 @@ _hs_no_tty_no_color() {
 _hs_dep() {
     command -v "${1:?}" >/dev/null || { HS_ERR "Not found: ${1} [Install with ${CDC}bin ${1}${CDR} first]"; return 255; }
 }
-HS_ERR()  { echo -e >&2  "${CR}ERROR: ${CDR}$*${CN}"; }
+HS_ERR()  { echo -e >&2  "${CN}${CR}ERROR: ${CDR}$*${CN}"; }
 HS_WARN() { echo -e >&2  "${CY}WARN: ${CDM}$*${CN}"; }
 HS_INFO() { echo -e >&2 "${CDG}INFO: ${CDM}$*${CN}"; }
+
+_hs_internet_allowed() {
+    [ -n "$_HS_INTERNET_ALLOWED" ] && return
+
+    HS_ERR "Internet access required. Type ${CDC}xint${CDR} to allow."
+    return 255
+}
+
+xint() {
+    [ -z "$_HS_INTERNET_ALLOWED" ] && {
+        HS_INFO "Internet access is now ${CDG}ENABLED${CDM}."
+        _HS_INTERNET_ALLOWED=1
+        return
+    }
+    unset _HS_INTERNET_ALLOWED
+    HS_INFO "Internet access is now ${CDR}DISABLED${CDM}."
+}
 
 xhelp_scan() {
     echo -e "\
@@ -231,6 +249,8 @@ purl() {
     local opts="timeout=10"
     local opts_init
     local url="${1:?}"
+    _hs_internet_allowed || return 255
+
     { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
     [ -n "$UNSAFE" ] && {
         opts_init="\
@@ -249,6 +269,8 @@ sys.stdout.buffer.write(urllib.request.urlopen(\"$url\", $opts).read())"
 surl() {
     local r="${1#*://}"
     local opts=("-quiet" "-ign_eof")
+    _hs_internet_allowed || return 255
+
     IFS=/ read -r host query <<<"${r}"
     openssl s_client --help 2>&1| grep -qFm1 -- -ignore_unexpected_eof && opts+=("-ignore_unexpected_eof")
     openssl s_client --help 2>&1| grep -qFm1 -- -verify_quiet && opts+=("-verify_quiet")
@@ -259,6 +281,8 @@ surl() {
 
 lurl() {
     local url="${1:?}"
+    _hs_internet_allowed || return 255
+
     { [[ "${url:0:8}" == "https://" ]] || [[ "${url:0:7}" == "http://" ]]; } || url="https://${url}"
     LANG=C perl -e 'use LWP::Simple qw(get);
 my $url = '"'${1:?}'"';
@@ -267,6 +291,8 @@ print(get $url);'
 
 burl() {
     local proto x host query
+    _hs_internet_allowed || return 255
+
     IFS=/ read -r proto x host query <<<"$1"
     exec 3<>"/dev/tcp/${host}/${PORT:-80}"
     echo -en "GET /${query} HTTP/1.0\r\nHost: ${host}\r\n\r\n" >&3
@@ -558,6 +584,8 @@ sub() {
 
 ptr() {
     local str
+    _hs_internet_allowed || return 255
+
     [ -n "$DNSDBTOKEN" ] && curl -m10 -H "X-API-Key: ${DNSDBTOKEN}" -H "Accept: application/json" -SsfL "https://api.dnsdb.info/lookup/rdata/ip/${1:?}/?limit=5&time_last_after=$(( $(date +%s) - 60 * 60 * 24 * 30))"
     dl "https://ip.thc.org/${1:?}?limit=20&f=${2}"
     curl -m10 -SsfL -H "Authorization: Bearer ${IOTOKEN}" "https://ipinfo.io/${1:?}" && echo "" # newline
@@ -2354,8 +2382,9 @@ hs_init_dl() {
     # Ignore TLS certificate. This is DANGEROUS but many hosts have missing ca-bundles or TLS-Proxies.
     if which curl &>/dev/null; then
         _HS_SSL_ERR="certificate "
-        dl() { 
+        dl() {
             local opts=()
+            _hs_internet_allowed || return 255
             [ -n "$UNSAFE" ] && opts=("-k")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 2 "${1:?}"
         }
@@ -2369,6 +2398,7 @@ hs_init_dl() {
         fi
         dl() {
             local opts=()
+            _hs_internet_allowed || return 255
             [ -n "$UNSAFE" ] && opts=("--no-check-certificate")
             # Can not use '-q' here because that also silences SSL/Cert errors
             wget -qO- "${opts[@]}" "${_HS_WGET_OPTS[@]}" "${1:?}"
