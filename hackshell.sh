@@ -613,6 +613,10 @@ ghostdev() {
     # Add the ghost IP to the out interface (so that ARP resolution works).
     ip addr add "${ghostip}/32" dev "${out}" label "perm $out"
     iptables -t mangle -L PREROUTING -vn | grep -F "0x8011"
+
+    _HS_GHOST_IS_UP=1
+    # _HS_GHOSTDEV_IS_UP=1
+    [ -z "$_HS_GHOST_REMAIN" ] && HS_WARN "GhostIP will ${CR}AUTO DESTRUCT${CDM} on exit. Type ${CDC}xghost${CDM} for it to remain."
 }
 
 unghostdev() {
@@ -626,7 +630,7 @@ unghostdev() {
         iptables -t nat -D PREROUTING "${n}"
     done
     iptables -t nat -D PREROUTING -d "${ghostip}" -m state --state NEW -j DNAT --to 255.255.255.255 2>/dev/null
-    ip addr show | grep 'inet ' | grep perm | while read -r l; do
+    ip addr show 2>/dev/null | grep 'inet ' | grep perm | while read -r l; do
         local ip="$(echo "$l" | awk '{print $2}')"
         local dev="${l##*perm }"
         ip addr del "${ip:?}" dev "${dev:?}"
@@ -639,7 +643,10 @@ ghostip() {
     else
         source <(dl https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/ghostip.sh)
     fi
-    [ -n "$_GHOST_IS_UP" ] && HS_WARN "GhostIP will ${CR}AUTO DESTRUCT${CDM} on exit. Type ${CDC}xghost${CDM} for it to remain."
+    [ -n "$_GHOSTIP_IS_UP" ] && {
+        _HS_GHOST_IS_UP=1
+        [ -z "$_HS_GHOST_REMAIN" ] && HS_WARN "GhostIP will ${CR}AUTO DESTRUCT${CDM} on exit. Type ${CDC}xghost${CDM} for it to remain."
+    }
 }
 
 ltr() {
@@ -2362,7 +2369,7 @@ ttyinject() {
 
 unghost() {
     declare -F ghostip_destruct >/dev/null && ghostip_destruct
-    unghostdev
+    [ -n "$_HS_GHOSTDEV_IS_UP" ] && unghostdev
 }
 
 xghost() {
@@ -2390,12 +2397,14 @@ hs_exit() {
             rmdir "${XHOME}/.run" 2>/dev/null && _hs_destruct
         fi
     }
-    if [ -n "$_HS_GHOST_REMAIN" ]; then
-        HS_WARN "GhostIP is still set. Type ${CDC}unghost${CDM} to destruct."
-    else
-        unghost
-        HS_WARN "GhostIP has now been ${CR}DESTRUCTED${CDM}. Type ${CDC}xghost${CDM} to prevent this in the future."
-    fi
+    [ -n "$_HS_GHOST_IS_UP" ] && {
+        if [ -n "$_HS_GHOST_REMAIN" ]; then
+            HS_WARN "GhostIP is still up. Type ${CDC}xghost${CDM} to auto-destruct on logout."
+        else
+            ghostip_destruct
+            HS_WARN "GhostIP has now been ${CR}DESTRUCTED${CDM}. Type ${CDC}xghost${CDM} to prevent this in the future."
+        fi
+    }
 
     [ -z "$QUIET" ] && [ -t 1 ] && echo -e "${CW}>>>>> 📖 More tips at https://thc.org/tips${CN} 😘"
     kill -9 $$
