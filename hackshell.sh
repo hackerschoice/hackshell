@@ -150,7 +150,13 @@ source IPs use ${CDC}bounceinit 1.2.3.4/24 5.6.7.8/16 ...${CDM}"
 noansi() { sed -e 's/\x1b\[[0-9;]*m//g'; }
 alias nocol=noansi
 
-xlog() { local a="$(sed "/${1:?}/d" <"${2:?}")" && echo "$a" >"${2:?}"; }
+xlog() {
+    local pattern=${1:?} file=${2:?};
+    pattern=${pattern//\//\\/};
+    local a;
+    a="$(sed -E "/$pattern/d" <"$file")" || return;
+    printf '%s\n' "$a" > "$file"
+}
 
 xsu() {
     local name="${1:?}"
