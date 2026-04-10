@@ -1478,7 +1478,7 @@ _warn_edr() {
         echo -en "${CN}"
     }
 
-    [ -f /sys/kernel/debug/kprobes/list ] && out="$(</sys/kernel/debug/kprobes/list)" && [ -n "$out" ] && {
+    [ -r /sys/kernel/debug/kprobes/list ] && out="$(</sys/kernel/debug/kprobes/list)" && [ -n "$out" ] && {
         echo -e "${CR}kprobes found:${CF}"
         echo "$out"
         echo -en "${CN}"
@@ -1815,7 +1815,7 @@ _warn_lkm() {
     local tainted
     local str
 
-    [ -e "/proc/sys/kernel/tainted" ] && n="$(</proc/sys/kernel/tainted)"
+    [ -r "/proc/sys/kernel/tainted" ] && n="$(</proc/sys/kernel/tainted)"
     # https://docs.kernel.org/admin-guide/tainted-kernels.html#decoding-tainted-state-at-runtime
     # Check for Proprietary(0), out-of-tree(12) and unsigned(13)
     [ "$n" -gt 0 ] && { [ $((n & 1)) -eq 1 ] || [ $((n>>12 & 1)) -eq 1 ] || [ $((n>>13 & 1)) -eq 1 ]; } && tainted=1
@@ -2420,8 +2420,8 @@ _memexec() {
 
     _hs_dep perl || return
     shift
-    [ $PPID -eq 1 ] && LANG=C exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
-    LANG=C perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
+    [ $PPID -eq 1 ] && LANG="${LANG:-C}" exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",16)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
+    LANG="${LANG:-C}" perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",16)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
     return $?
 }
 
