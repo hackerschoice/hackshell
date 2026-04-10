@@ -2760,7 +2760,7 @@ hs_init_alias() {
     # alias scp="scp ${HS_SSH_OPT[*]}"
     unalias ssh 2>/dev/null
     command vi --help 2>&1 | grep -Fqm1 -- -i && alias vi="vi -i NONE"
-    command vim && alias vi="vim -i NONE"
+    command -v vim >/dev/null && alias vi="vim -i NONE"
     alias vim="vim -i NONE"
     alias screen="screen -ln"
 
