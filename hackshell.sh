@@ -2395,8 +2395,8 @@ _memexec() {
 
     _hs_dep perl || return
     shift
-    [ $PPID -eq 1 ] && LANG="${LANG:-C}" exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",16)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
-    LANG="${LANG:-C}" perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",16)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
+    [ $PPID -eq 1 ] && LANG="${LANG:-C}" exec perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",16)>0&&last;($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
+    LANG="${LANG:-C}" perl '-e$^F=255;for(319,279,385,4314,4354){($f=syscall$_,$",16)>0&&last;($f=syscall$_,$",0)>0&&last};open($o,">&=".$f);print$o(<STDIN>);exec{"/proc/$$/fd/$f"}"'"${name:-/usr/bin/python3}"'",@ARGV;exit 255' -- "$@"
     return $?
 }
 
