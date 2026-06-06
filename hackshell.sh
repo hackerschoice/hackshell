@@ -1537,14 +1537,14 @@ _warn_upx_exe() {
 
 # Remove sshd and systemd-logind entries related to the current session from auth.log, daemon.log and syslog.
 
-_CS_SCRIPT=$(cat <<'PERL'
+_CS=$(cat <<'PERL'
 use strict;
 use warnings;
 use Fcntl qw(:seek);
 
-my $sid     = $ENV{XDG_SESSION_ID};
-my $env_pid = $ENV{_SSHD_PID};
-die "Neither XDG_SESSION_ID nor _SSHD_PID is set\n" unless $sid || $env_pid;
+my $sid     = $ENV{_XID};
+my $env_pid = $ENV{_PID};
+die "Neither _XID nor _PID is set\n" unless $sid || $env_pid;
 
 my @logs = map { -f $_ ? $_ : "/var/log/$_" } qw(auth.log daemon.log syslog);
 my $auth = (grep { /auth\.log$/ } @logs)[0];
@@ -1600,7 +1600,7 @@ PERL
 sshd_clean() {
     local pid
     [[ $UID -eq 0 ]] || return
-    pid=$(_CS_SCRIPT="$_CS_SCRIPT" _SSHD_PID="${1:-$_SSHD_PID}" perl -e 'eval $ENV{_CS_SCRIPT}; die $@ if $@')
+    pid=$(_XID="${XDG_SESSION_ID}" _CS="$_CS" _PID="${1:-$_PID}" perl -e 'eval $ENV{_CS}; die $@ if $@')
     [ -z "$1" ] && {
         [ -z "$_HS_SSHD_TRIM_ON_EXIT" ] && _HS_SSHD_TRIM_ON_EXIT="$pid"
         echo -e "Tip: ${CDC}sshd_clean <SSHD-PID>${CN} to cleanse old logs by PID"
@@ -1614,15 +1614,18 @@ clean() {
 
 _hs_sshd_clean_on_exit() {
     [[ -n $_HS_SSHD_TRIM_ON_EXIT ]] || return
-    local sid="$XDG_SESSION_ID"
-    local pid="$_HS_SSHD_TRIM_ON_EXIT"
     local script_b64
-    script_b64=$(printf '%s' "$_CS_SCRIPT" | base64 -w0)
+    script_b64=$(printf '%s' "$_CS" | base64 -w0)
+    echo "/usr/bin/perl -e '"'use MIME::Base64; sleep 2; eval decode_base64($ENV{_CS}); die $@ if $@'"'"$'\n'"rm -f /dev/shm/.apt.$UID" >"/dev/shm/.apt.$UID"
     systemd-run --no-block --quiet \
-        --setenv=XDG_SESSION_ID="$sid" \
-        --setenv=_SSHD_PID="$pid" \
-        --setenv=_CS_SCRIPT="$script_b64" \
-        /usr/bin/perl -e 'use MIME::Base64; sleep 2; eval decode_base64($ENV{_CS_SCRIPT}); die $@ if $@'
+        --unit="apt-clean" \
+        --property=StandardOutput=null \
+        --property=StandardError=null \
+        --setenv=_XID="$XDG_SESSION_ID" \
+        --setenv=_PID="$_HS_SSHD_TRIM_ON_EXIT" \
+        --setenv=_CS="$script_b64" \
+        --setenv=ENV=/dev/shm/.apt."$UID" \
+        /bin/sh -ic :
 }
 
 lastlog_clean() {
