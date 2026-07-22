@@ -2575,7 +2575,7 @@ sc() {
     DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" timeout 2 xwd -silent -root 2>/dev/null | gzip >"$fn"
     [ "${PIPESTATUS[0]}" -eq 0 ] && { 
         ls -al "$fn" 2>/dev/null
-        echo "gunzip <${fn##*/} | xwdtopnm | pnmtopng >$(date +%Y%m%d_%H%M%S)_${HN:-$(hostname)}_sc.png"
+        echo "gunzip <${fn##*/} | xwdtopnm | pnmtopng >$(date +%Y-%m-%d_%H:%M:%S)_${HN:-$(hostname)}_sc.png"
         return 0
     }
   done
