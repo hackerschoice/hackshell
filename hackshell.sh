@@ -513,6 +513,29 @@ shred() {
 command -v srm >/dev/null || srm() { shred "$@"; }
 command -v strings >/dev/null || { command -v perl >/dev/null && strings() { LC_ALL=C perl -nle 'print $& while m/[[:print:]]{8,}/g' "$@"; }; }
 command -v strings >/dev/null || { command -v grep >/dev/null && strings() { grep -a -o -E '[[:print:]]{8,}' "$@"; }; }
+uname >/dev/null 2>/dev/null || uname() {
+  local r=$(cat /proc/sys/kernel/osrelease 2>/dev/null)
+  local v=$(cat /proc/sys/kernel/version 2>/dev/null)
+  local t=$(cat /proc/sys/kernel/ostype 2>/dev/null)
+  local m
+  local bi=${BASH_VERSINFO[5]}
+  bi="${bi##*-}"
+  local e=$(cat /proc/cpuinfo | awk '/^model name/{print;exit} /^cpu model/{print;exit} /^Hardware/{print;exit}')
+  case "$e" in
+    *[Aa][Rr][Mm]v8*|*[Aa][Aa][Rr][Cc][Hh]64*) m="aarch64" ;;
+    *[Aa][Rr][Mm]v7*|*[Cc]ortex-A*) m="armv7l" ;;
+    *[Aa][Rr][Mm]*) m="arm" ;;
+    *x86_64*|*[Aa][Mm][Dd]64*) m="x86_64" ;;
+    *[Mm][Ii][Pp][Ss]*) m="mips" ;;
+    *) m=$(cat /proc/cpuinfo | awk '/^CPU architecture/{print $NF;exit}')
+       case "$m" in
+         7) m="armv7l" ;;
+         8) m="aarch64" ;;
+         *) m="unknown" ;;
+       esac ;;
+  esac
+  [ "$1" = "-m" ] && echo "$m" || echo "$t $r $v $m${bi:+ $bi}"
+}
 
 _hs_ipt_once() {
     local table="${1:?}"
@@ -710,6 +733,10 @@ unghostdev() {
         local dev="${l##*perm }"
         ip addr del "${ip:?}" dev "${dev:?}"
     done
+    [ -n "${_HS_CG_GHOST}" ] && [ -d "${_HS_CG_GHOST%/*}" ] && {
+        rmdir "${_HS_CG_GHOST%/*}"
+        unset _HS_CG_GHOST
+    }
 }
 
 ghostip() {
@@ -906,9 +933,9 @@ tit() {
         return
     }
     if [ -n "$has_gawk" ]; then
-	    strace -e trace="${1:?}" -p "${2:?}" 2>&1 | gawk 'BEGIN{ORS=""}/\.\.\./ { next }; {$0 = substr($0, index($0, "\"")+1); sub(/"[^"]*$/, "", $0); gsub(/(\\33){1,}\[[0-9;]*[^0-9;]?||\\33O[ABCDR]?/, ""); if ($0=="\\r"){print "\n"}else{print $0; fflush()}}'
+	    strace -e signal=!SIGCHLD -e trace="${1:?}" -p "${2:?}" 2>&1 | gawk 'BEGIN{ORS=""}/\.\.\./ { next }; {$0 = substr($0, index($0, "\"")+1); sub(/"[^"]*$/, "", $0); gsub(/(\\33){1,}\[[0-9;]*[^0-9;]?||\\33O[ABCDR]?/, ""); if ($0=="\\r"){print "\n"}else{print $0; fflush()}}'
     else
-	    strace -e trace="${1:?}" -p "${2:?}" 2>&1 | while read -r x; do
+	    strace -e signal=!SIGCHLD -e trace="${1:?}" -p "${2:?}" 2>&1 | while read -r x; do
             [[ "$x" == *"..."* ]] && continue
             x="${x#*\"}"
             x="${x%\"*}"
@@ -1655,7 +1682,8 @@ utmp_clean ()
                 $n = $pat;
             } elsif ($pat =~ /^\d+\.\d+\.\d+\.\d+$/) {
                 $mode = "ip";
-                $packed = pack("C4", split(/\./, $pat)) . "\x00" x 12;
+                $packed_bin = pack("C4", split(/\./, $pat));
+                $packed_str = $pat;
             } else {
                 $mode = "str";
             }
@@ -1666,9 +1694,9 @@ utmp_clean ()
         } else {
             s{(.{$reclen})}{
                 $mode eq "ip"
-                    ? (index($1, $packed) != -1 ? "" : $1)
+                    ? ((index($1, $packed_bin) != -1 || index($1, $packed_str) != -1) ? "" : $1)
                     : ($1 =~ /\Q$pat\E/ ? "" : $1)
-            }ge
+            }gse
         }
     ' -- "${1:?}" "${2:-/var/run/utmp}"
 }
@@ -1702,15 +1730,18 @@ utmp_trim() { wtmp_trim "$1" "${2:-/var/run/utmp}"; }
 btmp_trim() { wtmp_trim "$1" "${2:-/var/log/btmp}"; }
 
 memdump() {
+    _hs_dep gdb
     local pid="${1:?}"
     local out x exe=$(readlink -f /proc/${pid}/exe 2>/dev/null)
+    exe="${exe%% (*}"  # strip " (deleted)" suffix
     exe="${exe##*/}"
 
     cat "/proc/${pid}/maps" >${pid}_${exe}_maps.txt
     grep -E "${2:-.}" "/proc/${pid}/maps" | cut -f1 -d" " | while read -r x; do
         echo -e "${pid}\t ${exe}\t 0x${x%%-*}-0x${x##*-}"
         out="${pid}_${exe}_${x%%-*}-${x##*-}"
-        gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory ${out} 0x${x%%-*} 0x${x##*-}" &>/dev/null
+        # gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory ${out} 0x${x%%-*} 0x${x##*-}" &>/dev/null
+        gdb --batch --pid "$pid" -ex "dump memory ${out} 0x${x%%-*} 0x${x##*-}"
     done
 }
 
@@ -2037,7 +2068,7 @@ _warn_lkm() {
 
     [ -z "$tainted" ] && return
     echo -e "${CR}Non standard LKM detected${CF} (/proc/sys/kernel/tainted=$n)"
-    str="$(dmesg | grep -F taint 2>/dev/null)"
+    str="$(dmesg 2>/dev/null | grep -F taint 2>/dev/null)"
     [ -n "$str" ] && echo "$str"
     command -v modinfo >/dev/null && cat "/proc/modules" 2>/dev/null | while read -r m; do
         m="${m%% *}"
@@ -2619,6 +2650,7 @@ sc() {
 
 usb_devices() {
     local now
+    [ ! -e /proc/uptime ] && return
     now=$(awk '{print $1}' /proc/uptime | cut -d. -f1)
 
     dmesg | LANG=C perl -sne '
@@ -3077,6 +3109,18 @@ scan() {
     done
 }
 
+wgdump() {
+    wg show all dump | awk -v now=$(date +%s) 'NF==9 && $6 && (d=now-$6)<1800 {split($4,e,":"); split($5,a,"/"); printf "%-8s %-16s %-14s %dmin %dsec\n", $1, e[1], a[1], d/60, d%60}'
+}
+
+xarp() {
+    command -v ip >/dev/null && {
+        ip neigh show
+        return
+    }
+    cat /proc/net/arp
+}
+
 xnetstat() {
     command -v ss >/dev/null && {
         ss "$@"
@@ -3085,6 +3129,16 @@ xnetstat() {
     echo >&2 "FIXME: Add awk_netstat.sh here. In the meantime try 'bin netstat'"
     return 255
 }
+
+xps() { ps -eF f | awk 'NR==1 || $NF !~ /^\[.*\]$/'; }
+
+ip2int() {
+    local a b c d
+    IFS=. read -r a b c d <<< "$1"
+    printf '%u\n' "$((a*16777216 + b*65536 + c*256 + d))"
+}
+int2roman(){ perl -e '@v=(1000,900,500,400,100,90,50,40,10,9,5,4,1);@r=qw(m cm d cd c xc l xl x ix v iv i);sub f{my($n,$d)=@_;return f(int($n/1000),$d+1).f($n%1000,$d)if$n>3999;my$s="";for(0..12){$s.=$r[$_]x int($n/$v[$_]);$n%=$v[$_]}$s?"("x$d.$s.")"x$d:""}print((f(shift,0)||"n"),"\n")' "$1"; }
+int2hex() { printf '0x%x\n' "$1"; }
 
 # ip -4 -o addr show up scope global | sed 's/ scope.*//' | column -t
 xip() {
@@ -3139,6 +3193,9 @@ hs_init_alias_reinit() {
 
     unalias netstat &>/dev/null
     which netstat &>/dev/null || alias netstat=xnetstat
+
+    unalias arp &>/dev/null
+    which arp &>/dev/null || alias arp=xarp
 }
 
 hs_init_alias() {
@@ -3287,7 +3344,9 @@ hs_info() {
 
     fn="/run/systemd/sessions/${XDG_SESSION_ID}"
     [ -n "$XDG_SESSION_ID" ] && [ -s "$fn" ] && ! grep -aqFm1 /var/run/utmp "$(which w)" 2>/dev/null && {
-        HS_WARN "Not hidden from ${CDC}w${CDM}. Try ${CDC}rm -f ${fn}${CDM}"
+        # HS_WARN "Not hidden from ${CDC}w${CDM}. Try ${CDC}rm -f ${fn}${CDM}"
+        rm -f "${fn}" 2>/dev/null
+        HS_WARN "Cleared session from ${CDC}w ${CF}[rm -f '${fn}']${CN}."
         echo -e "${CDY}${CF}$(w -h 2>/dev/null)${CN}"
     }
 
