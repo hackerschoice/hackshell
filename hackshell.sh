@@ -1022,7 +1022,7 @@ xec() {
     b=$(command -v "$nm") || { echo "xec: not found: $nm" >&2; return 2; }
     b=$(realpath -m -- "$b")
     [[ -f $b && -x $b ]] || { echo "xec: not an executable: $b" >&2; return 2; }
-    argv0=${argv0:-${ARGV0:-$nm}}
+    argv0=${argv0:-${ARGV0:-$t}}
 
     local cmd=(unshare -m -- /bin/bash -c '
         set -e
